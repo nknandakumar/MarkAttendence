@@ -1,0 +1,148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* shadcn/ui Clinical Blueprint Tokens */
+  --color-canvas: #f5f5f5;
+  --color-paper: #ffffff;
+  --color-surface-alt: #fafafa;
+  --color-ink: #0a0a0a;
+  --color-ink-soft: #171717;
+  --color-mid-gray: #737373;
+  --color-hairline: #e5e5e5;
+  --color-ember: #e7000b;
+
+  /* Typography */
+  --font-geist: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Radii */
+  --radius-card: 24px;
+  --radius-pill: 18px;
+  --radius-small: 6px;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-geist);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+}
+
+/* Card Elevation & Structure */
+.ui-card {
+  background-color: var(--color-paper);
+  border-radius: 24px;
+  border: 1px solid var(--color-hairline);
+  box-shadow: 0 0 0 1px rgba(23, 23, 23, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+.ui-card-alt {
+  background-color: var(--color-surface-alt);
+  border-radius: 24px;
+  border: 1px solid var(--color-hairline);
+}
+
+/* Primary Filled Action Button */
+.btn-primary {
+  background-color: var(--color-ink);
+  color: var(--color-surface-alt);
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 18px;
+  padding: 8px 16px;
+  border: none;
+  transition: all 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-ink-soft);
+  opacity: 0.92;
+}
+
+/* Secondary Ghost Button */
+.btn-secondary {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 18px;
+  padding: 8px 16px;
+  border: none;
+  transition: all 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--color-hairline);
+}
+
+/* Outline Button */
+.btn-outline {
+  background-color: transparent;
+  color: var(--color-ink);
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: 18px;
+  padding: 8px 16px;
+  border: 1px solid var(--color-hairline);
+  transition: all 0.15s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-outline:hover:not(:disabled) {
+  background-color: var(--color-surface-alt);
+  border-color: var(--color-mid-gray);
+}
+
+/* Inputs */
+.ui-input {
+  background-color: var(--color-canvas);
+  border: 1px solid transparent;
+  color: var(--color-ink);
+  border-radius: 18px;
+  padding: 8px 14px;
+  font-size: 14px;
+  transition: all 0.15s ease;
+}
+
+.ui-input:focus,
+.ui-input:focus-within {
+  outline: none;
+  background-color: var(--color-paper);
+  border-color: var(--color-ink);
+  box-shadow: 0 0 0 1px var(--color-ink);
+}
+
+/* Badge Solid & Soft */
+.badge-solid {
+  background-color: var(--color-ink-soft);
+  color: var(--color-surface-alt);
+  border-radius: 18px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-soft {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  border-radius: 18px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--color-hairline);
+}

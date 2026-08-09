@@ -1,0 +1,55 @@
+import { z } from 'zod';
+
+export function normalizePhoneNumber(phone: string): string {
+  if (!phone) return '';
+  // Strip non-digit characters
+  let digits = phone.replace(/\D/g, '');
+  // If 12 digits starting with 91 (India country code), reduce to 10 digits if valid
+  if (digits.length === 12 && digits.startsWith('91')) {
+    digits = digits.slice(2);
+  }
+  // If 11 digits starting with 0, strip leading zero
+  if (digits.length === 11 && digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+  return digits;
+}
+
+export const markAttendanceSchema = z.object({
+  phone: z
+    .string()
+    .min(1, 'Phone number is required.')
+    .transform((val) => normalizePhoneNumber(val))
+    .refine((val) => val.length >= 7 && val.length <= 15, {
+      message: 'Please enter a valid phone number (7 to 15 digits).',
+    }),
+  classId: z.number().optional(),
+});
+
+export const mentorLoginSchema = z.object({
+  username: z.string().min(1, 'Username is required.'),
+  password: z.string().min(4, 'Password must be at least 4 characters.'),
+});
+
+export const classSchema = z.object({
+  name: z.string().min(1, 'Class name is required.').max(100),
+  description: z.string().optional(),
+  isActive: z.boolean().default(true),
+});
+
+export const studentSchema = z.object({
+  name: z.string().min(1, 'Student name is required.').max(100),
+  phone: z
+    .string()
+    .min(1, 'Phone number is required.')
+    .transform((val) => normalizePhoneNumber(val))
+    .refine((val) => val.length >= 7 && val.length <= 15, {
+      message: 'Please enter a valid phone number (7 to 15 digits).',
+    }),
+  classIds: z.array(z.number()).optional(),
+});
+
+export const appSettingSchema = z.object({
+  key: z.string().min(1),
+  value: z.string(),
+});
