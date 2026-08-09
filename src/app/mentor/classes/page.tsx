@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Search,
 } from 'lucide-react';
+import { fetchWithCache, invalidateCache } from '@/lib/cache/client-cache';
 
 export default function MentorClassesPage() {
   const [classes, setClasses] = useState<any[]>([]);
@@ -30,20 +31,25 @@ export default function MentorClassesPage() {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (forceFresh = false) => {
+    if (forceFresh) {
+      invalidateCache('/api/classes');
+      invalidateCache('/api/public/classes');
+    }
+    if (classes.length === 0) setLoading(true);
     try {
-      const meRes = await fetch('/api/mentor/me');
-      const meData = await meRes.json();
-      if (!meRes.ok || !meData.authenticated) {
+      const meData = await fetchWithCache('/api/mentor/me', 60 * 1000);
+      if (!meData || !meData.authenticated) {
         window.location.href = '/mentor/login';
         return;
       }
       setMentor(meData.mentor);
 
-      const classRes = await fetch('/api/classes');
-      const classData = await classRes.json();
-      if (classData.success) {
+      const classData = forceFresh
+        ? await fetch('/api/classes').then((r) => r.json())
+        : await fetchWithCache('/api/classes', 30 * 1000);
+
+      if (classData && classData.success) {
         setClasses(classData.classes);
       }
     } catch (err) {
@@ -96,7 +102,7 @@ export default function MentorClassesPage() {
         setIsModalOpen(false);
         setSuccessMsg(editingClass ? 'Class updated successfully!' : 'Class created successfully!');
         setTimeout(() => setSuccessMsg(''), 4000);
-        loadData();
+        loadData(true);
       } else {
         setError(data.message || 'Failed to save class.');
       }
@@ -118,7 +124,7 @@ export default function MentorClassesPage() {
       if (res.ok && data.success) {
         setSuccessMsg(`Class "${className}" deleted.`);
         setTimeout(() => setSuccessMsg(''), 4000);
-        loadData();
+        loadData(true);
       } else {
         alert(data.message || 'Failed to delete class.');
       }

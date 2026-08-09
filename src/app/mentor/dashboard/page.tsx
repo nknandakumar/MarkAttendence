@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Plus,
 } from 'lucide-react';
+import { fetchWithCache } from '@/lib/cache/client-cache';
 
 export default function MentorDashboardPage() {
   const [loading, setLoading] = useState(true);
@@ -19,29 +20,28 @@ export default function MentorDashboardPage() {
   const [classes, setClasses] = useState<any[]>([]);
   const [totalStudentsCount, setTotalStudentsCount] = useState<number>(0);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (isInitial = true) => {
+    if (isInitial && classes.length === 0) {
+      setLoading(true);
+    }
     try {
       // Get mentor info
-      const meRes = await fetch('/api/mentor/me');
-      const meData = await meRes.json();
-      if (!meRes.ok || !meData.authenticated) {
+      const meData = await fetchWithCache('/api/mentor/me', 60 * 1000);
+      if (!meData || !meData.authenticated) {
         window.location.href = '/mentor/login';
         return;
       }
       setMentor(meData.mentor);
 
       // Get classes
-      const classRes = await fetch('/api/classes');
-      const classData = await classRes.json();
-      if (classData.success) {
+      const classData = await fetchWithCache('/api/classes', 30 * 1000);
+      if (classData && classData.success) {
         setClasses(classData.classes);
       }
 
       // Get total students
-      const studRes = await fetch('/api/students');
-      const studData = await studRes.json();
-      if (studData.success) {
+      const studData = await fetchWithCache('/api/students', 30 * 1000);
+      if (studData && studData.success) {
         setTotalStudentsCount(studData.students.length);
       }
     } catch (err) {
@@ -52,7 +52,7 @@ export default function MentorDashboardPage() {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
   }, []);
 
   const totalTodayPresent = classes.reduce((sum, c) => sum + (c.todayPresent || 0), 0);

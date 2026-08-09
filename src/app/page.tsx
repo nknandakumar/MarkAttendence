@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Wifi, CheckCircle2, AlertCircle, Lock, RefreshCw, PhoneCall, UserCheck, BookOpen } from 'lucide-react';
+import { fetchWithCache } from '@/lib/cache/client-cache';
 
 interface ClassItem {
   id: number;
@@ -24,12 +25,11 @@ export default function StudentAttendancePage() {
     className?: string;
   }>({ type: 'idle', message: '' });
 
-  // Fetch available classes created by mentor
+  // Fetch available classes created by mentor with client-side cache
   const fetchClasses = async () => {
     try {
-      const res = await fetch('/api/public/classes', { cache: 'no-store' });
-      const data = await res.json();
-      if (res.ok && data.success && Array.isArray(data.classes)) {
+      const data = await fetchWithCache('/api/public/classes', 30 * 1000);
+      if (data && data.success && Array.isArray(data.classes)) {
         setClassesList(data.classes);
       }
     } catch (err) {
@@ -135,9 +135,11 @@ export default function StudentAttendancePage() {
             <UserCheck className="w-6 h-6 text-[#ffffff] shrink-0" />
           </div>
           <h1 className="text-3xl font-bold tracking-[-1px] text-[#0a0a0a]">
-            Mark Attendance
+            Classroom Attendance
           </h1>
-        
+          <p className="text-sm text-[#737373]">
+            Automated Daily Student Verification System
+          </p>
         </div>
 
         {/* Card Container (shadcn/ui Paper Card — 24px Radius, Hairline Border & Elevation) */}

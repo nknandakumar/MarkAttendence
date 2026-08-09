@@ -14,9 +14,8 @@ import {
   RefreshCw,
   X,
   FileSpreadsheet,
-  Phone,
-  BookOpen,
 } from 'lucide-react';
+import { fetchWithCache, invalidateCache } from '@/lib/cache/client-cache';
 
 export default function StudentManagementPage() {
   const [students, setStudents] = useState<any[]>([]);
@@ -47,21 +46,22 @@ export default function StudentManagementPage() {
 
   const [notification, setNotification] = useState('');
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (forceFresh = false) => {
+    if (forceFresh) {
+      invalidateCache('/api/students');
+    }
+    if (students.length === 0) setLoading(true);
     try {
-      const meRes = await fetch('/api/mentor/me');
-      const meData = await meRes.json();
-      if (!meRes.ok || !meData.authenticated) {
+      const meData = await fetchWithCache('/api/mentor/me', 60 * 1000);
+      if (!meData || !meData.authenticated) {
         window.location.href = '/mentor/login';
         return;
       }
       setMentor(meData.mentor);
 
       // Classes
-      const classRes = await fetch('/api/classes');
-      const classData = await classRes.json();
-      if (classData.success) {
+      const classData = await fetchWithCache('/api/classes', 30 * 1000);
+      if (classData && classData.success) {
         setClasses(classData.classes);
       }
 
@@ -69,9 +69,12 @@ export default function StudentManagementPage() {
       const studUrl = selectedClassFilter
         ? `/api/students?classId=${selectedClassFilter}`
         : '/api/students';
-      const studRes = await fetch(studUrl);
-      const studData = await studRes.json();
-      if (studData.success) {
+
+      const studData = forceFresh
+        ? await fetch(studUrl).then((r) => r.json())
+        : await fetchWithCache(studUrl, 20 * 1000);
+
+      if (studData && studData.success) {
         setStudents(studData.students);
       }
     } catch (err) {
@@ -126,7 +129,7 @@ export default function StudentManagementPage() {
         setModalOpen(false);
         setNotification(editingStudent ? 'Student updated successfully.' : 'Student registered successfully.');
         setTimeout(() => setNotification(''), 4000);
-        loadData();
+        loadData(true);
       } else {
         setError(data.message || 'Failed to save student.');
       }
@@ -146,7 +149,7 @@ export default function StudentManagementPage() {
       if (res.ok && data.success) {
         setNotification(`Student "${name}" deleted.`);
         setTimeout(() => setNotification(''), 4000);
-        loadData();
+        loadData(true);
       } else {
         alert(data.message || 'Failed to delete student.');
       }
@@ -181,7 +184,7 @@ export default function StudentManagementPage() {
         setImportSummary(data.summary);
         setNotification(data.message);
         setTimeout(() => setNotification(''), 4000);
-        loadData();
+        loadData(true);
       } else {
         setImportError(data.message || 'Import failed.');
       }
