@@ -53,12 +53,11 @@ src/
 │   ├── migrate.ts                    # Migration script runner
 │   └── seed.ts                       # Seed data handler
 └── lib/
-├── auth/session.ts               # JWT session creation & verification
-├── network/                      # Client IP detection & subnet evaluation logic
-├── validation/schemas.ts         # Zod input validation schemas
-├── rate-limit.ts                 # Sliding-window rate limiting helper
-└── export.ts                     # Binary spreadsheet export utilities
-
+    ├── auth/session.ts              # JWT session creation & verification
+    ├── network/                      # Client IP detection & subnet evaluation logic
+    ├── validation/schemas.ts        # Zod input validation schemas
+    ├── rate-limit.ts                 # Sliding-window rate limiting helper
+    └── export.ts                     # Binary spreadsheet export utilities
 
 ---
 
