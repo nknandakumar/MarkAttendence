@@ -154,7 +154,7 @@ export default function MentorLoginPage() {
               rel="noopener noreferrer"
               className="font-bold text-[#0a0a0a] hover:text-[#2385EB] transition underline"
             >
-              Nanda Kumar M
+              Nanda Kumar M.
             </a>
           </p>
         </div>
