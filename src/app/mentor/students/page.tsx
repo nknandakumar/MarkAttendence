@@ -342,6 +342,7 @@ export default function StudentManagementPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-[#ffffff] border-b border-[#e5e5e5] text-[11px] font-semibold uppercase tracking-wider text-[#737373]">
                   <tr>
+                    <th className="py-3 px-4 w-12 text-center">#</th>
                     <th className="py-3 px-5">Student Name</th>
                     <th className="py-3 px-5">Phone Number</th>
                     <th className="py-3 px-5">Enrolled Classes</th>
@@ -349,8 +350,11 @@ export default function StudentManagementPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e5e5e5] text-sm">
-                  {filteredStudents.map((student) => (
+                  {filteredStudents.map((student, idx) => (
                     <tr key={student.id} className="hover:bg-[#fafafa] transition">
+                      <td className="py-3.5 px-4 text-center font-mono text-xs text-[#737373] font-medium">
+                        {idx + 1}
+                      </td>
                       <td className="py-3.5 px-5 font-semibold text-[#0a0a0a]">
                         {student.name}
                       </td>

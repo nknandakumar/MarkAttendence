@@ -61,8 +61,8 @@ export default function MentorDashboardPage() {
       }
       setMentor(meData.mentor);
 
-      // Get classes
-      const classData = await fetchWithCache('/api/classes', 30 * 1000);
+      // Get classes (10s cache so present counts update quickly)
+      const classData = await fetchWithCache('/api/classes', 10 * 1000);
       if (classData && classData.success) {
         setClasses(classData.classes);
       }

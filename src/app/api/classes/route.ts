@@ -15,7 +15,9 @@ export async function GET() {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
     }
 
-    const todayStr = new Date().toISOString().split('T')[0];
+    // Use IST date (UTC+5:30) to correctly match how attendance is stored
+    const istOffsetMs = 5.5 * 60 * 60 * 1000;
+    const todayStr = new Date(Date.now() + istOffsetMs).toISOString().split('T')[0];
 
     // Fetch classes
     const allClasses = await db.select().from(classes).orderBy(classes.id);

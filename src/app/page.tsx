@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Wifi, CheckCircle2, AlertCircle, Lock, RefreshCw, PhoneCall, UserCheck, BookOpen, CalendarOff, Clock } from 'lucide-react';
+import { Wifi, CheckCircle2, AlertCircle, Lock, RefreshCw, PhoneCall, UserCheck, BookOpen, CalendarOff, Clock, ShieldCheck, Link2, ArrowRight } from 'lucide-react';
 import { fetchWithCache } from '@/lib/cache/client-cache';
+import FooterContribution from '@/components/FooterContribution';
 
 interface ClassItem {
   id: number;
@@ -215,11 +216,22 @@ export default function StudentAttendancePage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#f5f5f5] text-[#0a0a0a]">
+    <main className="min-h-screen flex flex-col items-center justify-center p-4 bg-[#f5f5f5] text-[#0a0a0a] relative">
+      {/* Top Right Admin Access Button */}
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
+        <a
+          href="/mentor/login"
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-[#374151] bg-[#ffffff] hover:bg-[#f3f4f6] hover:text-[#111827] rounded-full border border-[#e5e7eb] shadow-sm transition-all hover:shadow cursor-pointer"
+        >
+          <ShieldCheck className="w-4 h-4 text-[#2563eb]" />
+          <span>Admin Access</span>
+        </a>
+      </div>
+
       <div className="w-full max-w-md space-y-6">
         
         {/* Header Section */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2.5">
           <div className="flex justify-center mb-1">
             <img
               src="/logo.png"
@@ -230,6 +242,21 @@ export default function StudentAttendancePage() {
           <h1 className="text-3xl font-bold tracking-[-1px] text-[#0a0a0a]">
             Check In
           </h1>
+          <p className="text-xs font-medium text-[#737373] pt-0.5">
+            Created by{' '}
+            <a
+              href="https://www.linkedin.com/in/nandakumarm-/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group inline-flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Link2 className="w-3 h-3 text-[#2385EB] shrink-0" />
+              <span className="font-bold text-[#0a0a0a] group-hover:text-[#2385EB] underline decoration-[#2385EB]/60 group-hover:decoration-[#2385EB] underline-offset-4 transition-colors">
+                Nanda Kumar M
+              </span>
+              <ArrowRight className="w-3.5 h-3.5 text-[#2385EB] transition-transform duration-200 -rotate-45 group-hover:rotate-0 group-active:rotate-0 shrink-0" />
+            </a>
+          </p>
         </div>
 
         {/* Card Container */}
@@ -437,28 +464,18 @@ export default function StudentAttendancePage() {
 
         </div>
 
-        {/* Footer Link & Contribution */}
-        <div className="text-center space-y-2 pt-2">
+        {/* Footer Section */}
+        <div className="text-center space-y-3 pt-1">
           <div>
             <a
               href="/mentor/login"
               className="text-xs font-medium text-[#737373] hover:text-[#0a0a0a] transition underline"
             >
-              Mentor Access Portal →
+              Mentor & Admin Access Portal →
             </a>
           </div>
 
-          <p className="text-[11px] font-medium text-[#737373]">
-            Designed and Developed by{' '}
-            <a
-              href="https://www.linkedin.com/in/nandakumarm-/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-bold text-[#0a0a0a] hover:text-[#2385EB] transition underline"
-            >
-              Nanda Kumar
-            </a>
-          </p>
+          <FooterContribution />
         </div>
 
       </div>
