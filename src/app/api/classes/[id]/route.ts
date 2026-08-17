@@ -4,6 +4,7 @@ import { classes } from '@/db/schema';
 import { getMentorSession } from '@/lib/auth/session';
 import { classSchema } from '@/lib/validation/schemas';
 import { eq } from 'drizzle-orm';
+import { invalidateServerCache } from '@/lib/cache/server-cache';
 
 export async function PUT(
   req: NextRequest,
@@ -46,6 +47,10 @@ export async function PUT(
       .where(eq(classes.id, classId))
       .returning();
 
+    // Invalidate class + dashboard caches after write
+    invalidateServerCache('classes:');
+    invalidateServerCache('dashboard:');
+
     return NextResponse.json({
       success: true,
       message: 'Class updated successfully.',
@@ -78,6 +83,10 @@ export async function DELETE(
 
     await db.delete(classes).where(eq(classes.id, classId));
 
+    // Invalidate class + dashboard caches after delete
+    invalidateServerCache('classes:');
+    invalidateServerCache('dashboard:');
+
     return NextResponse.json({
       success: true,
       message: 'Class deleted successfully.',
@@ -90,4 +99,3 @@ export async function DELETE(
     );
   }
 }
-

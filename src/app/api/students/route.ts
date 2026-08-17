@@ -3,7 +3,8 @@ import { db } from '@/db';
 import { students, classStudents, classes } from '@/db/schema';
 import { getMentorSession } from '@/lib/auth/session';
 import { studentSchema, normalizePhoneNumber } from '@/lib/validation/schemas';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
+import { invalidateServerCache } from '@/lib/cache/server-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,10 +18,47 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get('search')?.trim() || '';
     const classIdParam = searchParams.get('classId');
+    const countOnly = searchParams.get('countOnly') === 'true';
 
-    let allStudents = await db.select().from(students).orderBy(students.id);
+    // If caller only needs the total count, return it with a single COUNT query
+    if (countOnly) {
+      const countResult = await db
+        .select({ count: sql<number>`cast(count(*) as int)` })
+        .from(students);
+      return NextResponse.json({
+        success: true,
+        count: Number(countResult[0]?.count ?? 0),
+      });
+    }
 
-    // Filter search by name or phone
+    // === Optimized: Fetch all students + all their class mappings in 2 queries (was N+1) ===
+
+    // Query 1: all students (optionally filtered by classId membership)
+    let allStudents;
+    if (classIdParam) {
+      const classIdNum = parseInt(classIdParam, 10);
+      if (!isNaN(classIdNum)) {
+        // Only fetch students enrolled in the given class — single JOIN query
+        allStudents = await db
+          .select({
+            id: students.id,
+            name: students.name,
+            phone: students.phone,
+            createdAt: students.createdAt,
+            updatedAt: students.updatedAt,
+          })
+          .from(students)
+          .innerJoin(classStudents, eq(classStudents.studentId, students.id))
+          .where(eq(classStudents.classId, classIdNum))
+          .orderBy(students.id);
+      } else {
+        allStudents = await db.select().from(students).orderBy(students.id);
+      }
+    } else {
+      allStudents = await db.select().from(students).orderBy(students.id);
+    }
+
+    // Apply search filter in-memory (fast, no extra DB round-trip)
     if (search) {
       const lowerSearch = search.toLowerCase();
       const normalizedSearchPhone = normalizePhoneNumber(search);
@@ -31,41 +69,44 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Enhance students with enrolled class details
-    const enhancedStudents = await Promise.all(
-      allStudents.map(async (student) => {
-        const mappings = await db
-          .select({
-            id: classes.id,
-            name: classes.name,
-          })
-          .from(classStudents)
-          .innerJoin(classes, eq(classStudents.classId, classes.id))
-          .where(eq(classStudents.studentId, student.id));
-
-        return {
-          ...student,
-          classes: mappings,
-          enrolledClasses: mappings,
-          classIds: mappings.map((m) => m.id),
-        };
-      })
-    );
-
-    // Filter by class ID if requested
-    let finalStudents = enhancedStudents;
-    if (classIdParam) {
-      const classIdNum = parseInt(classIdParam, 10);
-      if (!isNaN(classIdNum)) {
-        finalStudents = enhancedStudents.filter((s) =>
-          s.classIds.includes(classIdNum)
-        );
-      }
+    if (allStudents.length === 0) {
+      return NextResponse.json({ success: true, students: [] });
     }
+
+    // Query 2: fetch ALL class enrollments for ALL students in one JOIN query
+    const studentIds = allStudents.map((s) => s.id);
+    const allMappings = await db
+      .select({
+        studentId: classStudents.studentId,
+        classId: classes.id,
+        className: classes.name,
+      })
+      .from(classStudents)
+      .innerJoin(classes, eq(classStudents.classId, classes.id))
+      .where(inArray(classStudents.studentId, studentIds));
+
+    // Group mappings by studentId in memory — O(N) single pass
+    const mappingsByStudentId = new Map<number, { id: number; name: string }[]>();
+    for (const m of allMappings) {
+      const existing = mappingsByStudentId.get(m.studentId) || [];
+      existing.push({ id: m.classId, name: m.className });
+      mappingsByStudentId.set(m.studentId, existing);
+    }
+
+    // Merge without any additional DB queries
+    const enhancedStudents = allStudents.map((student) => {
+      const mappings = mappingsByStudentId.get(student.id) || [];
+      return {
+        ...student,
+        classes: mappings,
+        enrolledClasses: mappings,
+        classIds: mappings.map((m) => m.id),
+      };
+    });
 
     return NextResponse.json({
       success: true,
-      students: finalStudents,
+      students: enhancedStudents,
     });
   } catch (error) {
     console.error('Error fetching students:', error);
@@ -118,15 +159,16 @@ export async function POST(req: NextRequest) {
       })
       .returning();
 
-    // Assign classes if provided
+    // Assign classes in one batch insert if provided
     if (classIds && classIds.length > 0) {
-      for (const cId of classIds) {
-        await db.insert(classStudents).values({
-          classId: cId,
-          studentId: newStudent.id,
-        });
-      }
+      await db.insert(classStudents).values(
+        classIds.map((cId) => ({ classId: cId, studentId: newStudent.id }))
+      );
     }
+
+    // Invalidate class cache (student counts changed)
+    invalidateServerCache('classes:');
+    invalidateServerCache('dashboard:');
 
     return NextResponse.json({
       success: true,

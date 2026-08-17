@@ -72,7 +72,9 @@ export async function GET(req: NextRequest) {
     }
 
     // 2. Fetch Enrolled Students to compute absent students for target date
-    const targetDate = dateParam || new Date().toISOString().split('T')[0];
+    const istOffsetMs = 5.5 * 60 * 60 * 1000;
+    const istTodayStr = new Date(Date.now() + istOffsetMs).toISOString().split('T')[0];
+    const targetDate = dateParam || istTodayStr;
 
     const enrolledConditions = [];
     if (classIdParam) {

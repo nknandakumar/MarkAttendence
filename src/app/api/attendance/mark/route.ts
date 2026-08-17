@@ -5,6 +5,7 @@ import { isClassroomNetwork } from '@/lib/network/is-classroom-network';
 import { markAttendanceSchema } from '@/lib/validation/schemas';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { eq, and } from 'drizzle-orm';
+import { invalidateServerCache } from '@/lib/cache/server-cache';
 
 /**
  * Returns the current time in IST as { hours, minutes, timeStr }
@@ -254,6 +255,10 @@ export async function POST(req: NextRequest) {
         status: 'Present',
         ipAddress: clientIp,
       });
+
+      // Invalidate server-side cache so dashboard reflects new attendance instantly
+      invalidateServerCache('dashboard:');
+      invalidateServerCache('classes:');
 
       return NextResponse.json({
         success: true,

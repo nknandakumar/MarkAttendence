@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { students, classes, classStudents, attendance } from '@/db/schema';
 import { getMentorSession } from '@/lib/auth/session';
 import { eq, and } from 'drizzle-orm';
+import { invalidateServerCache } from '@/lib/cache/server-cache';
 
 /**
  * Admin Manual Attendance Marking API Route
@@ -109,6 +110,10 @@ export async function POST(req: NextRequest) {
         })
         .where(eq(attendance.id, existing[0].id));
 
+      // Invalidate caches so dashboard reflects updated status
+      invalidateServerCache('dashboard:');
+      invalidateServerCache('classes:');
+
       return NextResponse.json({
         success: true,
         message: `Attendance updated to '${attendanceStatus}' for ${student.name} on ${dateStr}.`,
@@ -124,6 +129,10 @@ export async function POST(req: NextRequest) {
         status: attendanceStatus,
         ipAddress: 'Admin Override',
       });
+
+      // Invalidate caches so dashboard reflects new attendance
+      invalidateServerCache('dashboard:');
+      invalidateServerCache('classes:');
 
       return NextResponse.json({
         success: true,

@@ -53,25 +53,16 @@ export default function MentorDashboardPage() {
       setLoading(true);
     }
     try {
-      // Get mentor info
-      const meData = await fetchWithCache('/api/mentor/me', 60 * 1000);
-      if (!meData || !meData.authenticated) {
+      // Single request returns mentor info + classes + total students count
+      // Cached 15s server-side — handles concurrent load from 50+ students
+      const data = await fetchWithCache('/api/dashboard', 15_000);
+      if (!data || !data.success) {
         window.location.href = '/mentor/login';
         return;
       }
-      setMentor(meData.mentor);
-
-      // Get classes (10s cache so present counts update quickly)
-      const classData = await fetchWithCache('/api/classes', 10 * 1000);
-      if (classData && classData.success) {
-        setClasses(classData.classes);
-      }
-
-      // Get total students
-      const studData = await fetchWithCache('/api/students', 30 * 1000);
-      if (studData && studData.success) {
-        setTotalStudentsCount(studData.students.length);
-      }
+      setMentor(data.mentor);
+      setClasses(data.classes ?? []);
+      setTotalStudentsCount(data.totalStudents ?? 0);
     } catch (err) {
       console.error(err);
     } finally {
