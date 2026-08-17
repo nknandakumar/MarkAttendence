@@ -48,6 +48,8 @@ export async function GET() {
           ...cls,
           studentCount,
           todayPresent,
+          sessionStart: cls.sessionStart ?? null,
+          sessionEnd: cls.sessionEnd ?? null,
         };
       })
     );
@@ -82,7 +84,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { name, description, isActive } = parseResult.data;
+    const { name, description, isActive, sessionStart, sessionEnd } = parseResult.data;
 
     // Check duplicate name
     const existing = await db
@@ -104,6 +106,8 @@ export async function POST(req: NextRequest) {
         name: name.trim(),
         description: description?.trim() || null,
         isActive,
+        sessionStart: sessionStart || null,
+        sessionEnd: sessionEnd || null,
       })
       .returning();
 

@@ -35,12 +35,11 @@ export async function POST(req: NextRequest) {
     }
 
     let importedCount = 0;
-    const duplicates: { row: number; name: string; phone: string; reason: string }[] = [];
     const invalid: { row: number; name?: string; phone?: string; reason: string }[] = [];
 
     // Pre-fetch existing students map by phone
-    const existingStudents = await db.select().from(students);
-    const existingPhoneSet = new Set(existingStudents.map((s) => s.phone));
+    const existingStudentsList = await db.select().from(students);
+    const studentMapByPhone = new Map(existingStudentsList.map((s) => [s.phone, s]));
 
     // Pre-fetch classes list
     const allClasses = await db.select().from(classes);
@@ -49,14 +48,24 @@ export async function POST(req: NextRequest) {
     for (let index = 0; index < rawRows.length; index++) {
       const row = rawRows[index];
       const rowNum = index + 2; // header is row 1
+      const keys = Object.keys(row);
 
-      // Flexibly map column keys (case-insensitive)
-      const nameKey = Object.keys(row).find((k) => k.toLowerCase().includes('name'));
-      const phoneKey = Object.keys(row).find(
-        (k) => k.toLowerCase().includes('phone') || k.toLowerCase().includes('mobile') || k.toLowerCase().includes('contact')
-      );
-      const classKey = Object.keys(row).find((k) => k.toLowerCase().includes('class'));
+      // Flexibly map column keys (handles headers like "Email Address", "full name", "Phone number")
+      const emailKey = keys.find((k) => k.toLowerCase().includes('email') || k.toLowerCase().includes('mail'));
+      const nameKey = keys.find((k) => {
+        const lk = k.toLowerCase();
+        return !lk.includes('email') && !lk.includes('mail') && (lk.includes('name') || lk.includes('student'));
+      });
+      const phoneKey = keys.find((k) => {
+        const lk = k.toLowerCase();
+        return !lk.includes('email') && (lk.includes('phone') || lk.includes('mobile') || lk.includes('contact') || lk.includes('number'));
+      });
+      const classKey = keys.find((k) => {
+        const lk = k.toLowerCase();
+        return lk.includes('class') || lk.includes('subject') || lk.includes('course');
+      });
 
+      const rawEmail = emailKey ? String(row[emailKey]).trim() : '';
       const rawName = nameKey ? String(row[nameKey]).trim() : '';
       const rawPhone = phoneKey ? String(row[phoneKey]).trim() : '';
       const rawClassName = classKey ? String(row[classKey]).trim() : '';
@@ -72,11 +81,6 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      if (existingPhoneSet.has(normalizedPhone)) {
-        duplicates.push({ row: rowNum, name: rawName, phone: normalizedPhone, reason: 'Phone number already registered' });
-        continue;
-      }
-
       // Determine class ID to assign
       let assignClassId = targetClassId;
       if (!assignClassId && rawClassName) {
@@ -84,24 +88,50 @@ export async function POST(req: NextRequest) {
         if (foundId) assignClassId = foundId;
       }
 
-      // Insert student
-      const [insertedStudent] = await db
-        .insert(students)
-        .values({
-          name: rawName,
-          phone: normalizedPhone,
-        })
-        .returning();
+      let studentIdToEnroll: number;
 
-      existingPhoneSet.add(normalizedPhone);
+      // Handle duplicate / existing phone numbers: Upsert student without throwing duplicate error
+      if (studentMapByPhone.has(normalizedPhone)) {
+        const existingStudent = studentMapByPhone.get(normalizedPhone)!;
+        studentIdToEnroll = existingStudent.id;
+
+        // Update student name / email if provided
+        const updateData: Record<string, any> = {};
+        if (rawName && rawName !== existingStudent.name) updateData.name = rawName;
+        if (rawEmail && rawEmail !== existingStudent.email) updateData.email = rawEmail;
+
+        if (Object.keys(updateData).length > 0) {
+          await db
+            .update(students)
+            .set({ ...updateData, updatedAt: new Date() })
+            .where(eq(students.id, existingStudent.id));
+        }
+      } else {
+        // Insert new student
+        const [insertedStudent] = await db
+          .insert(students)
+          .values({
+            name: rawName,
+            phone: normalizedPhone,
+            email: rawEmail || null,
+          })
+          .returning();
+
+        studentIdToEnroll = insertedStudent.id;
+        studentMapByPhone.set(normalizedPhone, insertedStudent);
+      }
+
       importedCount++;
 
-      // Assign to class if specified
+      // Assign student to target class if specified
       if (assignClassId) {
-        await db.insert(classStudents).values({
-          classId: assignClassId,
-          studentId: insertedStudent.id,
-        }).catch(() => {}); // ignore duplicate mapping
+        await db
+          .insert(classStudents)
+          .values({
+            classId: assignClassId,
+            studentId: studentIdToEnroll,
+          })
+          .catch(() => {}); // ignore if already enrolled in this class
       }
     }
 
@@ -110,12 +140,11 @@ export async function POST(req: NextRequest) {
       summary: {
         totalRows: rawRows.length,
         importedCount,
-        duplicateCount: duplicates.length,
+        duplicateCount: 0,
         invalidCount: invalid.length,
-        duplicates,
         invalid,
       },
-      message: `Import finished: ${importedCount} imported, ${duplicates.length} duplicates, ${invalid.length} invalid.`,
+      message: `Import completed successfully: ${importedCount} student records processed and enrolled.`,
     });
   } catch (error: any) {
     console.error('Error importing students:', error);

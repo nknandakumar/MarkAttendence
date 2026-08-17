@@ -14,13 +14,14 @@ import {
   RefreshCw,
   X,
   FileSpreadsheet,
+  BookOpen,
 } from 'lucide-react';
 import { fetchWithCache, invalidateCache } from '@/lib/cache/client-cache';
 
 export default function StudentManagementPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [mentor, setMentor] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState('');
@@ -46,12 +47,24 @@ export default function StudentManagementPage() {
 
   const [notification, setNotification] = useState('');
 
+  // Check URL query parameters for classId on initial load
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const cId = params.get('classId');
+      if (cId) {
+        setSelectedClassFilter(cId);
+      }
+    }
+  }, []);
+
   const loadData = async (forceFresh = false) => {
     if (forceFresh) {
       invalidateCache('/api/students');
     }
-    if (students.length === 0) setLoading(true);
+    
     try {
+      // Mentor profile
       const meData = await fetchWithCache('/api/mentor/me', 60 * 1000);
       if (!meData || !meData.authenticated) {
         window.location.href = '/mentor/login';
@@ -59,17 +72,23 @@ export default function StudentManagementPage() {
       }
       setMentor(meData.mentor);
 
-      // Classes
+      // Classes dropdown list
       const classData = await fetchWithCache('/api/classes', 30 * 1000);
       if (classData && classData.success) {
         setClasses(classData.classes);
       }
 
-      // Students
-      const studUrl = selectedClassFilter
-        ? `/api/students?classId=${selectedClassFilter}`
-        : '/api/students';
+      // If no class filter is selected, do NOT fetch all students
+      if (!selectedClassFilter) {
+        setStudents([]);
+        setLoading(false);
+        return;
+      }
 
+      setLoading(true);
+
+      // Fetch students for the selected class ONLY
+      const studUrl = `/api/students?classId=${selectedClassFilter}`;
       const studData = forceFresh
         ? await fetch(studUrl).then((r) => r.json())
         : await fetchWithCache(studUrl, 20 * 1000);
@@ -90,7 +109,8 @@ export default function StudentManagementPage() {
 
   const openAddModal = () => {
     setEditingStudent(null);
-    setStudentForm({ name: '', phone: '', classIds: [] });
+    const initialClassIds = selectedClassFilter ? [Number(selectedClassFilter)] : [];
+    setStudentForm({ name: '', phone: '', classIds: initialClassIds });
     setError('');
     setModalOpen(true);
   };
@@ -202,6 +222,8 @@ export default function StudentManagementPage() {
     return matchesSearch;
   });
 
+  const selectedClassName = classes.find((c) => String(c.id) === selectedClassFilter)?.name;
+
   return (
     <div className="min-h-screen bg-[#f5f5f5] text-[#0a0a0a] flex flex-col">
       <MentorNavbar mentorName={mentor?.name} />
@@ -212,10 +234,10 @@ export default function StudentManagementPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.75px] text-[#0a0a0a]">
-              Students Roster
+              Student Directory
             </h1>
             <p className="text-sm text-[#737373]">
-              Manage registered students, phone numbers, and class enrollments.
+              Manage registered students, phone numbers, and subject class enrollments.
             </p>
           </div>
 
@@ -225,6 +247,7 @@ export default function StudentManagementPage() {
                 setImportFile(null);
                 setImportError('');
                 setImportSummary(null);
+                setSelectedImportClassId(selectedClassFilter);
                 setImportModalOpen(true);
               }}
               className="btn-secondary"
@@ -251,7 +274,7 @@ export default function StudentManagementPage() {
           </div>
         )}
 
-        {/* Filters & Search */}
+        {/* Filters & Search Toolbar */}
         <div className="ui-card p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center space-x-2.5 w-full sm:w-auto flex-1 ml-1">
             <Search className="w-4 h-4 text-[#737373] shrink-0" />
@@ -260,18 +283,19 @@ export default function StudentManagementPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by student name or phone..."
-              className="w-full bg-transparent border-none text-[#0a0a0a] placeholder-[#737373] text-sm focus:outline-none font-medium"
+              disabled={!selectedClassFilter}
+              className="w-full bg-transparent border-none text-[#0a0a0a] placeholder-[#737373] text-sm focus:outline-none font-medium disabled:opacity-40"
             />
           </div>
 
           <div className="flex items-center space-x-2 w-full sm:w-auto shrink-0">
-            <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider whitespace-nowrap">Filter Class:</span>
+            <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider whitespace-nowrap">Select Class:</span>
             <select
               value={selectedClassFilter}
               onChange={(e) => setSelectedClassFilter(e.target.value)}
               className="px-3 py-1.5 ui-input text-xs font-semibold text-[#0a0a0a] cursor-pointer"
             >
-              <option value="">All Classes</option>
+              <option value="">-- Select Class --</option>
               {classes.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -281,22 +305,42 @@ export default function StudentManagementPage() {
           </div>
         </div>
 
-        {/* Students Table */}
-        {loading ? (
+        {/* Main Content Area */}
+        {!selectedClassFilter ? (
+          /* Empty state: No class selected */
+          <div className="ui-card p-12 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-[#fafafa] border border-[#e5e5e5] flex items-center justify-center mx-auto text-[#737373]">
+              <BookOpen className="w-6 h-6 shrink-0 text-[#0a0a0a]" />
+            </div>
+            <h3 className="text-lg font-bold text-[#0a0a0a]">Select a Class</h3>
+            <p className="text-xs text-[#737373] max-w-sm mx-auto leading-relaxed">
+              Please choose a class from the dropdown above to view its enrolled students.
+            </p>
+          </div>
+        ) : loading ? (
+          /* Loading state */
           <div className="py-12 text-center text-[#737373] space-y-2">
             <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#0a0a0a] shrink-0" />
-            <p className="text-sm">Loading student directory...</p>
+            <p className="text-sm">Loading enrolled students...</p>
           </div>
         ) : filteredStudents.length === 0 ? (
+          /* Empty state: Class selected but zero students */
           <div className="ui-card p-12 text-center space-y-3">
             <AlertCircle className="w-6 h-6 text-[#737373] mx-auto shrink-0" />
-            <p className="text-sm text-[#737373]">No students found in this roster view.</p>
+            <p className="text-sm font-semibold text-[#0a0a0a]">No students enrolled in {selectedClassName}.</p>
+            <p className="text-xs text-[#737373]">Click "Register Student" or "Import Excel" to add students to this class.</p>
           </div>
         ) : (
+          /* Students Table */
           <div className="ui-card overflow-hidden">
+            <div className="px-5 py-3 bg-[#fafafa] border-b border-[#e5e5e5] flex items-center justify-between">
+              <span className="text-xs font-bold text-[#0a0a0a] uppercase tracking-wider">
+                {selectedClassName} — Enrolled Students ({filteredStudents.length})
+              </span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-[#fafafa] border-b border-[#e5e5e5] text-[11px] font-semibold uppercase tracking-wider text-[#737373]">
+                <thead className="bg-[#ffffff] border-b border-[#e5e5e5] text-[11px] font-semibold uppercase tracking-wider text-[#737373]">
                   <tr>
                     <th className="py-3 px-5">Student Name</th>
                     <th className="py-3 px-5">Phone Number</th>
@@ -358,7 +402,7 @@ export default function StudentManagementPage() {
       {/* Add / Edit Student Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 bg-[#0a0a0a]/30 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="ui-card w-full max-w-md p-6 space-y-5">
+          <div className="ui-card w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#e5e5e5] pb-3">
               <h2 className="text-lg font-bold text-[#0a0a0a]">
                 {editingStudent ? 'Edit Student' : 'Register New Student'}
@@ -500,7 +544,7 @@ export default function StudentManagementPage() {
                   className="w-full text-xs text-[#737373] file:mr-3 file:py-1.5 file:px-3 file:rounded-[18px] file:border-0 file:text-xs file:font-semibold file:bg-[#f5f5f5] file:text-[#0a0a0a] hover:file:bg-[#e5e5e5] cursor-pointer"
                 />
                 <p className="text-[11px] text-[#737373]">
-                  File columns should contain <strong>Name</strong> and <strong>Phone</strong> headers.
+                  File columns can contain <strong>Email Address</strong>, <strong>full name</strong>, and <strong>Phone number</strong> headers. Duplicate/existing students are automatically enrolled without being skipped.
                 </p>
               </div>
 

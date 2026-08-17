@@ -13,8 +13,18 @@ import {
   CheckCircle2,
   RefreshCw,
   Search,
+  Clock,
+  X,
 } from 'lucide-react';
 import { fetchWithCache, invalidateCache } from '@/lib/cache/client-cache';
+
+/** Convert 24h "HH:MM" to "H:MM AM/PM" */
+function formatTime12h(t: string) {
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 || 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
 
 export default function MentorClassesPage() {
   const [classes, setClasses] = useState<any[]>([]);
@@ -27,6 +37,8 @@ export default function MentorClassesPage() {
   const [editingClass, setEditingClass] = useState<any>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [sessionStart, setSessionStart] = useState('');
+  const [sessionEnd, setSessionEnd] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -67,6 +79,8 @@ export default function MentorClassesPage() {
     setEditingClass(null);
     setName('');
     setDescription('');
+    setSessionStart('');
+    setSessionEnd('');
     setError('');
     setIsModalOpen(true);
   };
@@ -75,6 +89,8 @@ export default function MentorClassesPage() {
     setEditingClass(cls);
     setName(cls.name);
     setDescription(cls.description || '');
+    setSessionStart(cls.sessionStart || '');
+    setSessionEnd(cls.sessionEnd || '');
     setError('');
     setIsModalOpen(true);
   };
@@ -82,6 +98,16 @@ export default function MentorClassesPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || saving) return;
+
+    // Validate: if one time is set, both must be set
+    if ((sessionStart && !sessionEnd) || (!sessionStart && sessionEnd)) {
+      setError('Please set both start and end time, or leave both empty.');
+      return;
+    }
+    if (sessionStart && sessionEnd && sessionStart >= sessionEnd) {
+      setError('Session end time must be after start time.');
+      return;
+    }
 
     setSaving(true);
     setError('');
@@ -93,7 +119,12 @@ export default function MentorClassesPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), description: description.trim() }),
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim(),
+          sessionStart: sessionStart || null,
+          sessionEnd: sessionEnd || null,
+        }),
       });
 
       const data = await res.json();
@@ -151,7 +182,7 @@ export default function MentorClassesPage() {
               Classrooms Management
             </h1>
             <p className="text-sm text-[#737373]">
-              Create, edit, and organize classroom subjects for student enrollment.
+              Create, edit, and organize classroom subjects. Set session time windows to restrict when attendance can be marked.
             </p>
           </div>
 
@@ -228,6 +259,21 @@ export default function MentorClassesPage() {
                   <p className="text-xs text-[#737373] leading-relaxed">
                     {cls.description || 'No description provided.'}
                   </p>
+
+                  {/* Session timing badge */}
+                  {cls.sessionStart && cls.sessionEnd ? (
+                    <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#f0f9ff] border border-[#bae6fd] rounded-[10px] w-fit">
+                      <Clock className="w-3 h-3 text-[#0284c7] shrink-0" />
+                      <span className="text-[10px] font-semibold text-[#0284c7]">
+                        {formatTime12h(cls.sessionStart)} – {formatTime12h(cls.sessionEnd)}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#fafafa] border border-[#e5e5e5] rounded-[10px] w-fit">
+                      <Clock className="w-3 h-3 text-[#a3a3a3] shrink-0" />
+                      <span className="text-[10px] font-medium text-[#a3a3a3]">No time restriction</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between text-xs text-[#737373]">
@@ -239,7 +285,7 @@ export default function MentorClassesPage() {
                     href={`/mentor/students?classId=${cls.id}`}
                     className="font-semibold text-[#0a0a0a] hover:underline"
                   >
-                    View Roster →
+                    View Students →
                   </Link>
                 </div>
               </div>
@@ -249,13 +295,21 @@ export default function MentorClassesPage() {
 
       </main>
 
-      {/* Modal */}
+      {/* Create / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-[#0a0a0a]/30 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="ui-card w-full max-w-md p-6 space-y-5">
-            <h2 className="text-lg font-bold text-[#0a0a0a]">
-              {editingClass ? 'Edit Classroom' : 'Create New Classroom'}
-            </h2>
+          <div className="ui-card w-full max-w-md p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-[#0a0a0a]">
+                {editingClass ? 'Edit Classroom' : 'Create New Classroom'}
+              </h2>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 rounded-[10px] text-[#737373] hover:text-[#0a0a0a] hover:bg-[#f5f5f5]"
+              >
+                <X className="w-4 h-4 shrink-0" />
+              </button>
+            </div>
 
             <form onSubmit={handleSave} className="space-y-4">
               {error && (
@@ -273,7 +327,7 @@ export default function MentorClassesPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Python Programming"
+                  placeholder="e.g. Power BI"
                   required
                   className="w-full px-3.5 py-2.5 ui-input text-sm font-medium"
                 />
@@ -290,6 +344,50 @@ export default function MentorClassesPage() {
                   rows={3}
                   className="w-full px-3.5 py-2.5 ui-input text-sm font-medium resize-none"
                 />
+              </div>
+
+              {/* Session time window */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-[#737373] uppercase tracking-wider">
+                  Attendance Window <span className="normal-case font-normal">(optional)</span>
+                </label>
+                <p className="text-xs text-[#737373]">
+                  Students can only mark attendance within this time window. Leave both empty for no restriction.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-medium text-[#737373] uppercase">Start Time</label>
+                    <input
+                      type="time"
+                      value={sessionStart}
+                      onChange={(e) => {
+                        setSessionStart(e.target.value);
+                        setError('');
+                      }}
+                      className="w-full px-3 py-2.5 ui-input text-sm font-medium"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-medium text-[#737373] uppercase">End Time</label>
+                    <input
+                      type="time"
+                      value={sessionEnd}
+                      onChange={(e) => {
+                        setSessionEnd(e.target.value);
+                        setError('');
+                      }}
+                      className="w-full px-3 py-2.5 ui-input text-sm font-medium"
+                    />
+                  </div>
+                </div>
+                {sessionStart && sessionEnd && (
+                  <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#f0f9ff] border border-[#bae6fd] rounded-[10px]">
+                    <Clock className="w-3 h-3 text-[#0284c7] shrink-0" />
+                    <span className="text-[10px] font-semibold text-[#0284c7]">
+                      Preview: {formatTime12h(sessionStart)} – {formatTime12h(sessionEnd)}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 flex items-center justify-end space-x-2">

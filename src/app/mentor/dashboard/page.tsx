@@ -11,14 +11,42 @@ import {
   ArrowRight,
   RefreshCw,
   Plus,
+  Clock,
 } from 'lucide-react';
 import { fetchWithCache } from '@/lib/cache/client-cache';
+
+/** Returns current time in IST as "HH:MM" */
+function getISTTimeStr() {
+  const now = new Date();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + istOffsetMs);
+  const h = istDate.getUTCHours();
+  const m = istDate.getUTCMinutes();
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Convert 24h "HH:MM" to "H:MM AM/PM" */
+function formatTime12h(t: string) {
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 || 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
 
 export default function MentorDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [mentor, setMentor] = useState<any>(null);
   const [classes, setClasses] = useState<any[]>([]);
   const [totalStudentsCount, setTotalStudentsCount] = useState<number>(0);
+  const [currentTime, setCurrentTime] = useState(getISTTimeStr());
+
+  // Update current time every minute so absent count can update automatically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(getISTTimeStr());
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const loadData = async (isInitial = true) => {
     if (isInitial && classes.length === 0) {
@@ -56,6 +84,16 @@ export default function MentorDashboardPage() {
   }, []);
 
   const totalTodayPresent = classes.reduce((sum, c) => sum + (c.todayPresent || 0), 0);
+
+  /**
+   * Determines whether the absent count should be shown for a class.
+   * Rule: Absent number is only shown AFTER the session end time has passed.
+   * Until the session is done, absent count shows '–'.
+   */
+  function shouldShowAbsent(cls: any): boolean {
+    if (!cls.sessionEnd) return false;
+    return currentTime >= cls.sessionEnd;
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] text-[#0a0a0a] flex flex-col">
@@ -146,6 +184,7 @@ export default function MentorDashboardPage() {
                 const todayPresent = cls.todayPresent || 0;
                 const todayAbsent = Math.max(0, totalStudents - todayPresent);
                 const percentage = totalStudents > 0 ? Math.round((todayPresent / totalStudents) * 100) : 0;
+                const showAbsent = shouldShowAbsent(cls);
 
                 return (
                   <div
@@ -163,6 +202,16 @@ export default function MentorDashboardPage() {
                       </div>
                     </div>
 
+                    {/* Session timing indicator */}
+                    {cls.sessionStart && cls.sessionEnd && (
+                      <div className="flex items-center space-x-1.5 px-2 py-1 bg-[#f0f9ff] border border-[#bae6fd] rounded-[8px] w-fit">
+                        <Clock className="w-3 h-3 text-[#0284c7] shrink-0" />
+                        <span className="text-[10px] font-semibold text-[#0284c7]">
+                          {formatTime12h(cls.sessionStart)} – {formatTime12h(cls.sessionEnd)}
+                        </span>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-3 gap-2 text-center py-2.5 bg-[#fafafa] rounded-[18px] border border-[#e5e5e5]">
                       <div>
                         <span className="block text-[10px] text-[#737373] uppercase font-semibold">Enrolled</span>
@@ -174,7 +223,16 @@ export default function MentorDashboardPage() {
                       </div>
                       <div>
                         <span className="block text-[10px] text-[#737373] uppercase font-semibold">Absent</span>
-                        <span className="text-xs font-bold text-[#737373]">{todayAbsent}</span>
+                        {showAbsent ? (
+                          <span className="text-xs font-bold text-[#737373]">{todayAbsent}</span>
+                        ) : (
+                          <span
+                            className="text-xs font-bold text-[#d4d4d4]"
+                            title={cls.sessionEnd ? `Shown after session ends at ${formatTime12h(cls.sessionEnd)}` : ''}
+                          >
+                            –
+                          </span>
+                        )}
                       </div>
                     </div>
 

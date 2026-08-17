@@ -135,14 +135,28 @@ export default function MentorLoginPage() {
           </form>
         </div>
 
-        {/* Back link */}
-        <div className="text-center">
-          <a
-            href="/"
-            className="text-xs font-medium text-[#737373] hover:text-[#0a0a0a] transition underline"
-          >
-            ← Back to Student Attendance Page
-          </a>
+        {/* Back link & Contribution */}
+        <div className="text-center space-y-2">
+          <div>
+            <a
+              href="/"
+              className="text-xs font-medium text-[#737373] hover:text-[#0a0a0a] transition underline"
+            >
+              ← Back to Student Attendance Page
+            </a>
+          </div>
+
+          <p className="text-[11px] font-medium text-[#737373]">
+            Designed and Developed by{' '}
+            <a
+              href="https://www.linkedin.com/in/nandakumarm-/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-[#0a0a0a] hover:text-[#2385EB] transition underline"
+            >
+              Nanda Kumar M
+            </a>
+          </p>
         </div>
 
       </div>

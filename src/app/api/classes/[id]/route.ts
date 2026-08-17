@@ -31,7 +31,7 @@ export async function PUT(
       );
     }
 
-    const { name, description, isActive } = parseResult.data;
+    const { name, description, isActive, sessionStart, sessionEnd } = parseResult.data;
 
     const [updatedClass] = await db
       .update(classes)
@@ -39,6 +39,8 @@ export async function PUT(
         name: name.trim(),
         description: description?.trim() || null,
         isActive,
+        sessionStart: sessionStart || null,
+        sessionEnd: sessionEnd || null,
         updatedAt: new Date(),
       })
       .where(eq(classes.id, classId))
@@ -57,3 +59,35 @@ export async function PUT(
     );
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getMentorSession();
+    if (!session) {
+      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id } = await params;
+    const classId = parseInt(id, 10);
+    if (isNaN(classId)) {
+      return NextResponse.json({ success: false, message: 'Invalid class ID' }, { status: 400 });
+    }
+
+    await db.delete(classes).where(eq(classes.id, classId));
+
+    return NextResponse.json({
+      success: true,
+      message: 'Class deleted successfully.',
+    });
+  } catch (error) {
+    console.error('Error deleting class:', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to delete class' },
+      { status: 500 }
+    );
+  }
+}
+

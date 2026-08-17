@@ -26,6 +26,7 @@ export const students = pgTable(
     id: serial('id').primaryKey(),
     name: varchar('name', { length: 255 }).notNull(),
     phone: varchar('phone', { length: 50 }).notNull().unique(),
+    email: varchar('email', { length: 255 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -39,6 +40,9 @@ export const classes = pgTable('classes', {
   name: varchar('name', { length: 255 }).notNull().unique(),
   description: text('description'),
   isActive: boolean('is_active').default(true).notNull(),
+  // Session window: "HH:MM" in 24h format (e.g. "10:00", "11:10"). Null = no restriction.
+  sessionStart: varchar('session_start', { length: 5 }),
+  sessionEnd: varchar('session_end', { length: 5 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -97,6 +101,24 @@ export const appSettings = pgTable('app_settings', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+/**
+ * holidays — Admin-managed no-class dates.
+ * Covers both public/festival holidays and ad-hoc "no class today" dates.
+ * Date format: YYYY-MM-DD
+ */
+export const holidays = pgTable(
+  'holidays',
+  {
+    id: serial('id').primaryKey(),
+    date: varchar('date', { length: 10 }).notNull().unique(), // YYYY-MM-DD, one entry per day
+    reason: varchar('reason', { length: 255 }).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('holidays_date_idx').on(table.date),
+  ]
+);
+
 export type Mentor = typeof mentors.$inferSelect;
 export type NewMentor = typeof mentors.$inferInsert;
 
@@ -114,3 +136,6 @@ export type NewAttendance = typeof attendance.$inferInsert;
 
 export type AppSetting = typeof appSettings.$inferSelect;
 export type NewAppSetting = typeof appSettings.$inferInsert;
+
+export type Holiday = typeof holidays.$inferSelect;
+export type NewHoliday = typeof holidays.$inferInsert;

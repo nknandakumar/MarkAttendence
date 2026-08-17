@@ -1,31 +1,82 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Wifi, CheckCircle2, AlertCircle, Lock, RefreshCw, PhoneCall, UserCheck, BookOpen } from 'lucide-react';
+import { Wifi, CheckCircle2, AlertCircle, Lock, RefreshCw, PhoneCall, UserCheck, BookOpen, CalendarOff, Clock } from 'lucide-react';
 import { fetchWithCache } from '@/lib/cache/client-cache';
 
 interface ClassItem {
   id: number;
   name: string;
   description?: string | null;
+  sessionStart?: string | null;
+  sessionEnd?: string | null;
+}
+
+interface HolidayInfo {
+  isHoliday: boolean;
+  reason?: string;
+}
+
+/** Convert 24h "HH:MM" to "H:MM AM/PM" */
+function formatTime12h(t?: string | null) {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 || 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+/** Returns today's date as YYYY-MM-DD in IST */
+function getISTDateStr() {
+  const now = new Date();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + istOffsetMs);
+  return istDate.toISOString().split('T')[0];
+}
+
+/** Returns current time as "HH:MM" in IST */
+function getISTTimeStr() {
+  const now = new Date();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + istOffsetMs);
+  const h = istDate.getUTCHours();
+  const m = istDate.getUTCMinutes();
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Check if today (IST) is a weekend */
+function isTodayWeekend(): { is: boolean; day: string } {
+  const todayStr = getISTDateStr();
+  const dayOfWeek = new Date(todayStr + 'T00:00:00Z').getUTCDay();
+  if (dayOfWeek === 0) return { is: true, day: 'Sunday' };
+  if (dayOfWeek === 6) return { is: true, day: 'Saturday' };
+  return { is: false, day: '' };
 }
 
 export default function StudentAttendancePage() {
   const [networkStatus, setNetworkStatus] = useState<'checking' | 'allowed' | 'rejected'>('checking');
-  const [networkMessage, setNetworkMessage] = useState<string>('Checking classroom network...');
   const [phone, setPhone] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [classesList, setClassesList] = useState<ClassItem[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<string>('');
-  
+  const [holidayInfo, setHolidayInfo] = useState<HolidayInfo>({ isHoliday: false });
+  const [currentTime, setCurrentTime] = useState<string>(getISTTimeStr());
+
   const [resultState, setResultState] = useState<{
-    type: 'idle' | 'success' | 'duplicate' | 'error';
+    type: 'idle' | 'success' | 'duplicate' | 'error' | 'session_closed' | 'holiday';
     message: string;
     studentName?: string;
     className?: string;
   }>({ type: 'idle', message: '' });
 
-  // Fetch available classes created by mentor with client-side cache
+  // Update live clock every 10 seconds to auto-detect active class window transitions
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(getISTTimeStr());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch available classes
   const fetchClasses = async () => {
     try {
       const data = await fetchWithCache('/api/public/classes', 30 * 1000);
@@ -37,38 +88,70 @@ export default function StudentAttendancePage() {
     }
   };
 
+  /** Check if today is a holiday (weekend or admin-defined) */
+  const checkHoliday = async () => {
+    const weekend = isTodayWeekend();
+    if (weekend.is) {
+      setHolidayInfo({ isHoliday: true, reason: `It's ${weekend.day} — No class today! 🎉` });
+      return;
+    }
+
+    try {
+      const todayStr = getISTDateStr();
+      const res = await fetch('/api/holidays');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.holidays)) {
+        const todayHoliday = data.holidays.find((h: any) => h.date === todayStr);
+        if (todayHoliday) {
+          setHolidayInfo({ isHoliday: true, reason: todayHoliday.reason });
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to check holidays:', err);
+    }
+
+    setHolidayInfo({ isHoliday: false });
+  };
+
   // Verify network on load
   const checkNetwork = async () => {
     setNetworkStatus('checking');
-    setNetworkMessage('Checking classroom network...');
     try {
       const res = await fetch('/api/attendance/check-network');
       const data = await res.json();
       if (res.ok && data.isAllowed) {
         setNetworkStatus('allowed');
-        setNetworkMessage('Classroom network verified');
       } else {
         setNetworkStatus('rejected');
-        setNetworkMessage(data.message || 'Connect to the classroom Wi-Fi to mark attendance.');
       }
     } catch {
       setNetworkStatus('rejected');
-      setNetworkMessage('Connect to the classroom Wi-Fi to mark attendance.');
     }
   };
 
   useEffect(() => {
     checkNetwork();
     fetchClasses();
+    checkHoliday();
   }, []);
+
+  // Find the currently active class based on assigned timings
+  const activeClass = classesList.find((cls) => {
+    if (!cls.sessionStart || !cls.sessionEnd) return false;
+    return currentTime >= cls.sessionStart && currentTime <= cls.sessionEnd;
+  });
+
+  // Scheduled classes for display when no session is active
+  const scheduledClasses = classesList.filter((c) => c.sessionStart && c.sessionEnd);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedClassId) {
+    if (!activeClass) {
       setResultState({
-        type: 'error',
-        message: 'Please select your class from the dropdown options.',
+        type: 'session_closed',
+        message: 'No active class session right now.',
       });
       return;
     }
@@ -84,7 +167,7 @@ export default function StudentAttendancePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           phone, 
-          classId: Number(selectedClassId) 
+          classId: activeClass.id 
         }),
       });
 
@@ -103,12 +186,18 @@ export default function StudentAttendancePage() {
           message: data.message || 'Attendance already marked today.',
           studentName: data.studentName,
         });
+      } else if (data.code === 'SESSION_CLOSED') {
+        setResultState({
+          type: 'session_closed',
+          message: data.message || 'Session is closed.',
+        });
+      } else if (data.code === 'SESSION_HOLIDAY') {
+        setResultState({
+          type: 'holiday',
+          message: data.message || 'No class today.',
+        });
       } else if (data.code === 'CLASSROOM_NETWORK_REQUIRED') {
         setNetworkStatus('rejected');
-        setResultState({
-          type: 'error',
-          message: 'Connect to the classroom Wi-Fi to mark attendance.',
-        });
       } else {
         setResultState({
           type: 'error',
@@ -131,18 +220,19 @@ export default function StudentAttendancePage() {
         
         {/* Header Section */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-[18px] bg-[#0a0a0a] text-[#ffffff] mb-1">
-            <UserCheck className="w-6 h-6 text-[#ffffff] shrink-0" />
+          <div className="flex justify-center mb-1">
+            <img
+              src="/logo.png"
+              alt="Check In Logo"
+              className="h-16 w-auto object-contain"
+            />
           </div>
           <h1 className="text-3xl font-bold tracking-[-1px] text-[#0a0a0a]">
-            Classroom Attendance
+            Check In
           </h1>
-          <p className="text-sm text-[#737373]">
-            Automated Daily Student Verification System
-          </p>
         </div>
 
-        {/* Card Container (shadcn/ui Paper Card — 24px Radius, Hairline Border & Elevation) */}
+        {/* Card Container */}
         <div className="ui-card p-6 sm:p-8 space-y-6">
           
           {/* Status Indicator */}
@@ -186,8 +276,22 @@ export default function StudentAttendancePage() {
             )}
           </div>
 
-          {/* Form when Network is Approved */}
-          {networkStatus === 'allowed' && (
+          {/* Holiday Banner — shown when network is allowed but it's a holiday */}
+          {networkStatus === 'allowed' && holidayInfo.isHoliday && (
+            <div className="py-6 text-center space-y-3 bg-[#fefce8] rounded-[18px] border border-[#fde68a] p-4">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#fde68a] text-[#92400e]">
+                <CalendarOff className="w-6 h-6 shrink-0" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[#92400e]">No Class Today 🎉</h3>
+                <p className="text-sm text-[#78350f] mt-1 font-medium">{holidayInfo.reason}</p>
+                <p className="text-xs text-[#a16207] mt-1">Attendance is not available. See you next time!</p>
+              </div>
+            </div>
+          )}
+
+          {/* Form when Network is Approved and not a holiday */}
+          {networkStatus === 'allowed' && !holidayInfo.isHoliday && (
             <div className="space-y-5">
               
               {resultState.type === 'success' ? (
@@ -213,7 +317,7 @@ export default function StudentAttendancePage() {
                       setResultState({ type: 'idle', message: '' });
                       setPhone('');
                     }}
-                    className="mt-1 text-xs font-semibold text-[#15803d] hover:underline transition"
+                    className="mt-1 text-xs font-semibold text-[#15803d] hover:underline transition cursor-pointer"
                   >
                     Mark another student
                   </button>
@@ -233,46 +337,59 @@ export default function StudentAttendancePage() {
                   </div>
                   <button
                     onClick={() => setResultState({ type: 'idle', message: '' })}
-                    className="text-xs font-semibold text-[#dc2626] hover:underline"
+                    className="text-xs font-semibold text-[#dc2626] hover:underline cursor-pointer"
                   >
                     Try another phone number
                   </button>
                 </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Class Selection Dropdown */}
-                  {classesList.length > 0 && (
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-[#737373] uppercase tracking-wider">
-                        Select Class
-                      </label>
-                      <div className="flex items-center space-x-2.5 ui-input px-3.5 py-2.5 relative">
-                        <BookOpen className="w-4 h-4 text-[#737373] shrink-0" />
-                        <select
-                          value={selectedClassId}
-                          onChange={(e) => {
-                            setSelectedClassId(e.target.value);
-                            if (resultState.type === 'error') {
-                              setResultState({ type: 'idle', message: '' });
-                            }
-                          }}
-                          className="w-full bg-transparent border-none text-[#0a0a0a] text-sm font-medium focus:outline-none focus:ring-0 p-0 appearance-none cursor-pointer pr-6"
-                        >
-                          <option value="" disabled className="bg-[#ffffff] text-[#737373]">
-                            -- Select Your Class --
-                          </option>
-                          {classesList.map((cls) => (
-                            <option key={cls.id} value={cls.id} className="bg-[#ffffff] text-[#0a0a0a]">
-                              {cls.name} {cls.description ? `(${cls.description})` : ''}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#737373] text-[10px]">
-                          ▼
-                        </div>
+              ) : !activeClass ? (
+                /* No Active Session View */
+                <div className="py-6 text-center space-y-4 bg-[#fafafa] rounded-[18px] border border-[#e5e5e5] p-5">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#ffffff] text-[#737373] border border-[#e5e5e5]">
+                    <Clock className="w-6 h-6 shrink-0" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-[#0a0a0a]">No Active Class Session</h3>
+                    <p className="text-xs text-[#737373] leading-relaxed max-w-xs mx-auto">
+                      Attendance can only be submitted during an active class session time window.
+                    </p>
+                  </div>
+
+                  {scheduledClasses.length > 0 && (
+                    <div className="pt-3 border-t border-[#e5e5e5] text-left space-y-2">
+                      <p className="text-[10px] font-bold text-[#737373] uppercase tracking-wider">Class Timings Today:</p>
+                      <div className="space-y-1.5">
+                        {scheduledClasses.map((cls) => (
+                          <div key={cls.id} className="flex items-center justify-between text-xs p-2.5 bg-[#ffffff] rounded-[12px] border border-[#e5e5e5]">
+                            <span className="font-semibold text-[#0a0a0a]">{cls.name}</span>
+                            <span className="font-mono text-[#0284c7] font-semibold">{formatTime12h(cls.sessionStart)} – {formatTime12h(cls.sessionEnd)}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
+                </div>
+              ) : (
+                /* Active Session Form */
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  
+                  {/* Active Class Session Card */}
+                  <div className="p-4 bg-[#f0f9ff] border border-[#bae6fd] rounded-[18px] flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-[14px] bg-[#0284c7] text-[#ffffff] flex items-center justify-center shrink-0">
+                        <BookOpen className="w-5 h-5 shrink-0" />
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="w-2 h-2 rounded-full bg-[#16a34a] animate-pulse" />
+                          <h3 className="text-base font-bold text-[#0284c7]">{activeClass.name}</h3>
+                        </div>
+                        <p className="text-xs text-[#0369a1] font-semibold mt-0.5">
+                          Session Open: {formatTime12h(activeClass.sessionStart)} – {formatTime12h(activeClass.sessionEnd)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="space-y-1.5">
                     <label className="block text-xs font-semibold text-[#737373] uppercase tracking-wider">
@@ -301,8 +418,8 @@ export default function StudentAttendancePage() {
 
                   <button
                     type="submit"
-                    disabled={submitting || !phone.trim() || !selectedClassId}
-                    className="btn-primary w-full disabled:opacity-40 disabled:cursor-not-allowed mt-2 cursor-pointer"
+                    disabled={submitting || !phone.trim()}
+                    className="w-full font-bold text-sm text-[#ffffff] bg-[#2385EB] hover:bg-[#1b6ecc] active:bg-[#165bb0] py-3 px-4 rounded-[18px] transition-all disabled:opacity-40 disabled:cursor-not-allowed mt-2 cursor-pointer shadow-sm flex items-center justify-center space-x-2"
                   >
                     {submitting ? (
                       <>
@@ -320,14 +437,28 @@ export default function StudentAttendancePage() {
 
         </div>
 
-        {/* Footer Link */}
-        <div className="text-center">
-          <a
-            href="/mentor/login"
-            className="text-xs font-medium text-[#737373] hover:text-[#0a0a0a] transition underline"
-          >
-            Mentor Access Portal →
-          </a>
+        {/* Footer Link & Contribution */}
+        <div className="text-center space-y-2 pt-2">
+          <div>
+            <a
+              href="/mentor/login"
+              className="text-xs font-medium text-[#737373] hover:text-[#0a0a0a] transition underline"
+            >
+              Mentor Access Portal →
+            </a>
+          </div>
+
+          <p className="text-[11px] font-medium text-[#737373]">
+            Designed and Developed by{' '}
+            <a
+              href="https://www.linkedin.com/in/nandakumarm-/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-[#0a0a0a] hover:text-[#2385EB] transition underline"
+            >
+              Nanda Kumar
+            </a>
+          </p>
         </div>
 
       </div>

@@ -1,10 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { students, classes, classStudents, attendance } from '@/db/schema';
+import { students, classes, classStudents, attendance, holidays } from '@/db/schema';
 import { isClassroomNetwork } from '@/lib/network/is-classroom-network';
 import { markAttendanceSchema } from '@/lib/validation/schemas';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { eq, and } from 'drizzle-orm';
+
+/**
+ * Returns the current time in IST as { hours, minutes, timeStr }
+ * where timeStr is "HH:MM" in 24-hour format.
+ */
+function getISTTime() {
+  const now = new Date();
+  // IST = UTC + 5:30
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + istOffsetMs);
+  const hours = istDate.getUTCHours();
+  const minutes = istDate.getUTCMinutes();
+  const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return { hours, minutes, timeStr };
+}
+
+/**
+ * Returns today's date string in YYYY-MM-DD based on IST.
+ */
+function getISTDateStr() {
+  const now = new Date();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + istOffsetMs);
+  return istDate.toISOString().split('T')[0];
+}
+
+/** Format 24h HH:MM to 12h H:MM AM/PM */
+function formatTime12h(t: string) {
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 || 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -52,7 +85,40 @@ export async function POST(req: NextRequest) {
 
     const { phone: normalizedPhone, classId: requestedClassId } = parseResult.data;
 
-    // 4. Find Student by Phone
+    // 4. Weekend Check (IST) — Saturday (6) and Sunday (0) are non-class days
+    const todayStr = getISTDateStr();
+    const dayOfWeek = new Date(todayStr + 'T00:00:00Z').getUTCDay(); // 0=Sun, 6=Sat
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      const dayName = dayOfWeek === 0 ? 'Sunday' : 'Saturday';
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'SESSION_HOLIDAY',
+          message: `No class today — it's ${dayName}! Enjoy your weekend. 🎉`,
+        },
+        { status: 403 }
+      );
+    }
+
+    // 5. Public Holiday / No-Class Check
+    const holidayRecord = await db
+      .select()
+      .from(holidays)
+      .where(eq(holidays.date, todayStr))
+      .limit(1);
+
+    if (holidayRecord.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'SESSION_HOLIDAY',
+          message: `No class today — ${holidayRecord[0].reason}. See you next time! 🎉`,
+        },
+        { status: 403 }
+      );
+    }
+
+    // 6. Find Student by Phone
     const studentRecords = await db
       .select()
       .from(students)
@@ -72,41 +138,66 @@ export async function POST(req: NextRequest) {
 
     const student = studentRecords[0];
 
-    // 5. Determine Target Class
-    const targetClassId = requestedClassId;
+    // 7. Determine Target Class automatically via Current IST Time
+    const { timeStr: currentTimeStr } = getISTTime();
+    let classRecord: any = null;
 
-    if (!targetClassId || isNaN(targetClassId)) {
-      return NextResponse.json(
-        {
-          success: false,
-          code: 'NO_CLASS_SELECTED',
-          message: 'Please select a class for attendance.',
-        },
-        { status: 400 }
-      );
+    if (requestedClassId && !isNaN(requestedClassId)) {
+      const found = await db
+        .select()
+        .from(classes)
+        .where(eq(classes.id, requestedClassId))
+        .limit(1);
+      if (found.length > 0) classRecord = found[0];
     }
 
-    const currentClassId = targetClassId;
+    // If classId wasn't passed or not found, find the currently active class for current time
+    if (!classRecord) {
+      const allClasses = await db.select().from(classes);
+      const activeClass = allClasses.find((c) => {
+        if (!c.isActive) return false;
+        if (!c.sessionStart || !c.sessionEnd) return false;
+        return currentTimeStr >= c.sessionStart && currentTimeStr <= c.sessionEnd;
+      });
 
-    // Verify class exists
-    const classRecords = await db
-      .select()
-      .from(classes)
-      .where(eq(classes.id, currentClassId))
-      .limit(1);
+      if (!activeClass) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'SESSION_CLOSED',
+            message: 'No active class session right now. Attendance is currently closed.',
+          },
+          { status: 403 }
+        );
+      }
 
-    if (classRecords.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          code: 'CLASS_NOT_FOUND',
-          message: 'Selected class was not found.',
-        },
-        { status: 400 }
-      );
+      classRecord = activeClass;
     }
 
-    // 6. Check Student Membership in Active Class
+    const currentClassId = classRecord.id;
+
+    // 8. Verify Session Time Window (IST) for the class
+    if (classRecord.sessionStart && classRecord.sessionEnd) {
+      if (currentTimeStr < classRecord.sessionStart || currentTimeStr > classRecord.sessionEnd) {
+        const isBeforeSession = currentTimeStr < classRecord.sessionStart;
+        const message = isBeforeSession
+          ? `Session for ${classRecord.name} opens at ${formatTime12h(classRecord.sessionStart)}. Please wait until class starts.`
+          : `Session for ${classRecord.name} closed at ${formatTime12h(classRecord.sessionEnd)}. Attendance window has ended.`;
+
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'SESSION_CLOSED',
+            message,
+            sessionStart: classRecord.sessionStart,
+            sessionEnd: classRecord.sessionEnd,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    // 9. Check Student Membership in Active Class
     const membershipRecords = await db
       .select()
       .from(classStudents)
@@ -123,16 +214,13 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           code: 'NOT_ENROLLED',
-          message: `Student "${student.name}" is not enrolled in ${classRecords[0].name}.`,
+          message: `Student "${student.name}" is not enrolled in ${classRecord.name}.`,
         },
         { status: 400 }
       );
     }
 
-    // 7. Today's Date String (YYYY-MM-DD)
-    const todayStr = new Date().toISOString().split('T')[0];
-
-    // 8. Check Existing Attendance Record
+    // 10. Check Existing Attendance Record
     const existingAttendance = await db
       .select()
       .from(attendance)
@@ -150,14 +238,14 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           code: 'ALREADY_MARKED',
-          message: 'Attendance already marked today.',
+          message: `Attendance already marked today for ${classRecord.name}.`,
           studentName: student.name,
         },
         { status: 200 }
       );
     }
 
-    // 9. Insert Attendance (with DB Unique Constraint safety)
+    // 11. Insert Attendance
     try {
       await db.insert(attendance).values({
         classId: currentClassId,
@@ -170,17 +258,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         studentName: student.name,
-        className: classRecords[0].name,
+        className: classRecord.name,
         message: 'Attendance marked successfully.',
       });
     } catch (err: any) {
-      // Postgres duplicate constraint error code 23505
       if (err?.code === '23505' || err?.message?.includes('unique') || err?.message?.includes('duplicate')) {
         return NextResponse.json(
           {
             success: false,
             code: 'ALREADY_MARKED',
-            message: 'Attendance already marked today.',
+            message: `Attendance already marked today for ${classRecord.name}.`,
             studentName: student.name,
           },
           { status: 200 }

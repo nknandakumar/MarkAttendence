@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import MentorNavbar from '@/components/mentor/Navbar';
+import Link from 'next/link';
 import {
   CalendarCheck,
   Search,
@@ -10,6 +11,7 @@ import {
   Globe,
   CheckCircle2,
   AlertCircle,
+  UserCheck,
 } from 'lucide-react';
 
 export default function AttendanceHistoryPage() {
@@ -99,6 +101,14 @@ export default function AttendanceHistoryPage() {
               <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${loading ? 'animate-spin' : ''}`} />
               <span>Refresh Logs</span>
             </button>
+
+            <Link
+              href="/mentor/attendance/mark"
+              className="btn-primary"
+            >
+              <UserCheck className="w-4 h-4 shrink-0" />
+              <span>Manual Entry</span>
+            </Link>
           </div>
         </div>
 

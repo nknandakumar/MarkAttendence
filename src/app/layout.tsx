@@ -5,8 +5,8 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Classroom Attendance',
-  description: 'Production-ready 24/7 automated classroom attendance application.',
+  title: 'Check In',
+  description: 'Automated classroom attendance application.',
 };
 
 export const viewport: Viewport = {

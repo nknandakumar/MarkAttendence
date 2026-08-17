@@ -31,10 +31,23 @@ export const mentorLoginSchema = z.object({
   password: z.string().min(4, 'Password must be at least 4 characters.'),
 });
 
+// HH:MM 24h time format validator
+const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
 export const classSchema = z.object({
   name: z.string().min(1, 'Class name is required.').max(100),
   description: z.string().optional(),
   isActive: z.boolean().default(true),
+  sessionStart: z
+    .string()
+    .regex(timeRegex, 'Session start must be in HH:MM format.')
+    .optional()
+    .nullable(),
+  sessionEnd: z
+    .string()
+    .regex(timeRegex, 'Session end must be in HH:MM format.')
+    .optional()
+    .nullable(),
 });
 
 export const studentSchema = z.object({
@@ -52,4 +65,18 @@ export const studentSchema = z.object({
 export const appSettingSchema = z.object({
   key: z.string().min(1),
   value: z.string(),
+});
+
+// YYYY-MM-DD date format validator
+const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
+export const holidaySchema = z.object({
+  date: z
+    .string()
+    .regex(dateRegex, 'Date must be in YYYY-MM-DD format.')
+    .min(1, 'Date is required.'),
+  reason: z
+    .string()
+    .min(1, 'Reason is required.')
+    .max(255, 'Reason must be 255 characters or less.'),
 });

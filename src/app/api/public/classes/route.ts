@@ -13,6 +13,8 @@ export async function GET() {
         name: classes.name,
         description: classes.description,
         isActive: classes.isActive,
+        sessionStart: classes.sessionStart,
+        sessionEnd: classes.sessionEnd,
       })
       .from(classes)
       .orderBy(classes.id);
