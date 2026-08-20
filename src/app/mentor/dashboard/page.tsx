@@ -7,6 +7,7 @@ import {
   BookOpen,
   Users,
   CalendarCheck,
+  GraduationCap,
   AlertCircle,
   ArrowRight,
   RefreshCw,
@@ -113,7 +114,7 @@ export default function MentorDashboardPage() {
         </div>
 
         {/* Metrics Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <div className="ui-card p-5 flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider">Total Classes</span>
@@ -143,6 +144,22 @@ export default function MentorDashboardPage() {
               <CalendarCheck className="w-5 h-5 shrink-0" />
             </div>
           </div>
+
+          <Link
+            href="/mentor/tests"
+            className="ui-card p-5 flex items-center justify-between hover:border-[#737373] transition group"
+          >
+            <div className="space-y-1">
+              <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider">Assessments</span>
+              <p className="text-xs font-bold text-[#0a0a0a] group-hover:underline flex items-center space-x-1 pt-1.5">
+                <span>Manage Tests</span>
+                <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-[18px] bg-[#0a0a0a] text-[#ffffff] flex items-center justify-center">
+              <GraduationCap className="w-5 h-5 shrink-0 text-[#ffffff]" />
+            </div>
+          </Link>
         </div>
 
         {/* Classes Table / Cards */}

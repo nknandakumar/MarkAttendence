@@ -80,3 +80,42 @@ export const holidaySchema = z.object({
     .min(1, 'Reason is required.')
     .max(255, 'Reason must be 255 characters or less.'),
 });
+
+export const testSchema = z.object({
+  classId: z.number({ required_error: 'Class is required' }),
+  title: z.string().min(1, 'Test title is required.').max(255),
+  testDate: z
+    .string()
+    .regex(dateRegex, 'Test date must be in YYYY-MM-DD format.')
+    .min(1, 'Test date is required.'),
+  maxMarks: z
+    .number({ required_error: 'Maximum marks is required' })
+    .int('Maximum marks must be an integer')
+    .positive('Maximum marks must be greater than 0'),
+});
+
+export const updateTestSchema = z.object({
+  classId: z.number().optional(),
+  title: z.string().min(1, 'Test title is required.').max(255).optional(),
+  testDate: z
+    .string()
+    .regex(dateRegex, 'Test date must be in YYYY-MM-DD format.')
+    .optional(),
+  maxMarks: z
+    .number()
+    .int('Maximum marks must be an integer')
+    .positive('Maximum marks must be greater than 0')
+    .optional(),
+});
+
+export const singleMarkSchema = z.object({
+  studentId: z.number({ required_error: 'Student ID is required' }),
+  marksObtained: z.number().int().min(0).nullable().optional(),
+  isAbsent: z.boolean().default(false),
+  notes: z.string().optional().nullable(),
+});
+
+export const testMarksBatchSchema = z.object({
+  marks: z.array(singleMarkSchema),
+});
+

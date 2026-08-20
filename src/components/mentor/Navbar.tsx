@@ -8,6 +8,7 @@ import {
   BookOpen,
   Users,
   CalendarCheck,
+  GraduationCap,
   BarChart3,
   Settings,
   LogOut,
@@ -21,6 +22,7 @@ const navItems = [
   { label: 'Classes', href: '/mentor/classes', icon: BookOpen },
   { label: 'Students', href: '/mentor/students', icon: Users },
   { label: 'Attendance', href: '/mentor/attendance', icon: CalendarCheck },
+  { label: 'Tests', href: '/mentor/tests', icon: GraduationCap },
   { label: 'Reports', href: '/mentor/reports', icon: BarChart3 },
   { label: 'Settings', href: '/mentor/settings', icon: Settings },
 ];
@@ -51,7 +53,7 @@ export default function MentorNavbar({ mentorName }: { mentorName?: string }) {
             </div>
             <div>
               <Link href="/mentor/dashboard" className="text-sm font-semibold text-[#0a0a0a] tracking-tight hover:opacity-80 transition">
-                Classroom Suite
+                Mentor's Dashboard  
               </Link>
             </div>
           </div>

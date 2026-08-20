@@ -119,6 +119,54 @@ export const holidays = pgTable(
   ]
 );
 
+/**
+ * tests — Assessments / Mock tests conducted for a class.
+ */
+export const tests = pgTable(
+  'tests',
+  {
+    id: serial('id').primaryKey(),
+    classId: integer('class_id')
+      .notNull()
+      .references(() => classes.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 255 }).notNull(),
+    testDate: varchar('test_date', { length: 10 }).notNull(), // YYYY-MM-DD
+    maxMarks: integer('max_marks').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('tests_class_id_idx').on(table.classId),
+    index('tests_date_idx').on(table.testDate),
+  ]
+);
+
+/**
+ * test_marks — Student scored marks for a specific test.
+ */
+export const testMarks = pgTable(
+  'test_marks',
+  {
+    id: serial('id').primaryKey(),
+    testId: integer('test_id')
+      .notNull()
+      .references(() => tests.id, { onDelete: 'cascade' }),
+    studentId: integer('student_id')
+      .notNull()
+      .references(() => students.id, { onDelete: 'cascade' }),
+    marksObtained: integer('marks_obtained'), // integer marks (nullable if absent or unmarked)
+    isAbsent: boolean('is_absent').default(false).notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    unique('test_marks_test_student_unique').on(table.testId, table.studentId),
+    index('test_marks_test_id_idx').on(table.testId),
+    index('test_marks_student_id_idx').on(table.studentId),
+  ]
+);
+
 export type Mentor = typeof mentors.$inferSelect;
 export type NewMentor = typeof mentors.$inferInsert;
 
@@ -139,3 +187,10 @@ export type NewAppSetting = typeof appSettings.$inferInsert;
 
 export type Holiday = typeof holidays.$inferSelect;
 export type NewHoliday = typeof holidays.$inferInsert;
+
+export type Test = typeof tests.$inferSelect;
+export type NewTest = typeof tests.$inferInsert;
+
+export type TestMark = typeof testMarks.$inferSelect;
+export type NewTestMark = typeof testMarks.$inferInsert;
+
