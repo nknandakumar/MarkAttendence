@@ -24,20 +24,22 @@ export async function GET(
       return NextResponse.json({ success: false, message: 'Invalid test ID' }, { status: 400 });
     }
 
-    // 1. Fetch test
+    // 1. Fetch test — className is stored directly on the test record
     const testResult = await db
       .select({
         id: tests.id,
         classId: tests.classId,
-        className: classes.name,
+        className: tests.className,
         title: tests.title,
         testDate: tests.testDate,
         maxMarks: tests.maxMarks,
+        maxMarksM1: tests.maxMarksM1,
+        maxMarksM2: tests.maxMarksM2,
+        maxMarksMI: tests.maxMarksMI,
         createdAt: tests.createdAt,
         updatedAt: tests.updatedAt,
       })
       .from(tests)
-      .innerJoin(classes, eq(tests.classId, classes.id))
       .where(eq(tests.id, testId))
       .limit(1);
 
@@ -46,60 +48,98 @@ export async function GET(
     }
 
     const test = testResult[0];
+    const classDeleted = test.classId === null;
 
-    // 2. Fetch all enrolled students for this class
-    const enrolledStudents = await db
-      .select({
-        id: students.id,
-        name: students.name,
-        phone: students.phone,
-      })
-      .from(students)
-      .innerJoin(classStudents, eq(classStudents.studentId, students.id))
-      .where(eq(classStudents.classId, test.classId))
-      .orderBy(students.name);
+    // 2. Fetch enrolled students — only if class still exists
+    let enrolledStudents: { id: number; name: string; phone: string }[] = [];
+    if (!classDeleted && test.classId) {
+      enrolledStudents = await db
+        .select({
+          id: students.id,
+          name: students.name,
+          phone: students.phone,
+        })
+        .from(students)
+        .innerJoin(classStudents, eq(classStudents.studentId, students.id))
+        .where(eq(classStudents.classId, test.classId))
+        .orderBy(students.name);
+    }
 
-    // 3. Fetch existing marks for this test
+    // 3. Fetch existing marks for this test (includes students who may no longer be in the class)
     const recordedMarks = await db
       .select({
         id: testMarks.id,
         studentId: testMarks.studentId,
+        studentName: students.name,
+        studentPhone: students.phone,
         marksObtained: testMarks.marksObtained,
         isAbsent: testMarks.isAbsent,
+        marksM1: testMarks.marksM1,
+        isAbsentM1: testMarks.isAbsentM1,
+        marksM2: testMarks.marksM2,
+        isAbsentM2: testMarks.isAbsentM2,
+        marksMI: testMarks.marksMI,
+        isAbsentMI: testMarks.isAbsentMI,
         notes: testMarks.notes,
       })
       .from(testMarks)
+      .innerJoin(students, eq(testMarks.studentId, students.id))
       .where(eq(testMarks.testId, testId));
 
+    // 4. Build a merged student list:
+    //    - All currently enrolled students (if class exists)
+    //    - Plus any students who have marks recorded but may no longer be enrolled
     const marksMap = new Map<number, (typeof recordedMarks)[0]>();
     for (const m of recordedMarks) {
       marksMap.set(m.studentId, m);
     }
 
-    // 4. Merge student list with their marks
-    const studentListWithMarks = enrolledStudents.map((s) => {
+    const seenStudentIds = new Set<number>();
+    const studentListWithMarks: any[] = [];
+
+    // First add all currently enrolled students
+    for (const s of enrolledStudents) {
+      seenStudentIds.add(s.id);
       const record = marksMap.get(s.id);
-      const marksObtained = record ? record.marksObtained : null;
-      const isAbsent = record ? record.isAbsent : false;
-      const notes = record ? record.notes : null;
-      const markId = record ? record.id : null;
 
-      const percentage =
-        !isAbsent && marksObtained !== null && marksObtained !== undefined && test.maxMarks > 0
-          ? Math.round((marksObtained / test.maxMarks) * 1000) / 10
-          : null;
-
-      return {
+      studentListWithMarks.push({
         studentId: s.id,
         studentName: s.name,
         studentPhone: s.phone,
-        markId,
-        marksObtained,
-        isAbsent,
-        notes,
-        percentage,
-      };
-    });
+        markId: record ? record.id : null,
+        marksObtained: record ? record.marksObtained : null,
+        isAbsent: record ? record.isAbsent : false,
+        marksM1: record ? record.marksM1 : null,
+        isAbsentM1: record ? record.isAbsentM1 : false,
+        marksM2: record ? record.marksM2 : null,
+        isAbsentM2: record ? record.isAbsentM2 : false,
+        marksMI: record ? record.marksMI : null,
+        isAbsentMI: record ? record.isAbsentMI : false,
+        notes: record ? record.notes : null,
+      });
+    }
+
+    // Then add students who have marks but are no longer enrolled (or class was deleted)
+    for (const m of recordedMarks) {
+      if (!seenStudentIds.has(m.studentId)) {
+        seenStudentIds.add(m.studentId);
+        studentListWithMarks.push({
+          studentId: m.studentId,
+          studentName: m.studentName,
+          studentPhone: m.studentPhone,
+          markId: m.id,
+          marksObtained: m.marksObtained,
+          isAbsent: m.isAbsent,
+          marksM1: m.marksM1,
+          isAbsentM1: m.isAbsentM1,
+          marksM2: m.marksM2,
+          isAbsentM2: m.isAbsentM2,
+          marksMI: m.marksMI,
+          isAbsentMI: m.isAbsentMI,
+          notes: m.notes,
+        });
+      }
+    }
 
     // Compute live stats
     const scoredList = studentListWithMarks.filter((s) => !s.isAbsent && s.marksObtained !== null);
@@ -123,7 +163,8 @@ export async function GET(
       success: true,
       test: {
         ...test,
-        enrolledCount: enrolledStudents.length,
+        classDeleted,
+        enrolledCount: studentListWithMarks.length,
         gradedCount: scoredList.length,
         absentCount: absentList.length,
         averageMarks,
@@ -174,7 +215,22 @@ export async function PUT(
 
     if (parseResult.data.title !== undefined) updates.title = parseResult.data.title.trim();
     if (parseResult.data.testDate !== undefined) updates.testDate = parseResult.data.testDate;
-    if (parseResult.data.maxMarks !== undefined) updates.maxMarks = parseResult.data.maxMarks;
+    if (parseResult.data.maxMarksM1 !== undefined) updates.maxMarksM1 = parseResult.data.maxMarksM1;
+    if (parseResult.data.maxMarksM2 !== undefined) updates.maxMarksM2 = parseResult.data.maxMarksM2;
+    if (parseResult.data.maxMarksMI !== undefined) updates.maxMarksMI = parseResult.data.maxMarksMI;
+    if (parseResult.data.maxMarks !== undefined) {
+      updates.maxMarks = parseResult.data.maxMarks;
+    } else if (
+      parseResult.data.maxMarksM1 !== undefined ||
+      parseResult.data.maxMarksM2 !== undefined ||
+      parseResult.data.maxMarksMI !== undefined
+    ) {
+      // Recalculate combined max marks
+      const m1 = updates.maxMarksM1 ?? 50;
+      const m2 = updates.maxMarksM2 ?? 50;
+      const mi = updates.maxMarksMI ?? 50;
+      updates.maxMarks = m1 + m2 + mi;
+    }
     if (parseResult.data.classId !== undefined) updates.classId = parseResult.data.classId;
 
     const [updatedTest] = await db

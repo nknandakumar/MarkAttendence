@@ -77,6 +77,8 @@ export async function GET() {
         todayPresent: attendanceCountMap.get(cls.id) ?? 0,
         sessionStart: cls.sessionStart ?? null,
         sessionEnd: cls.sessionEnd ?? null,
+        startDate: cls.startDate ?? null,
+        endDate: cls.endDate ?? null,
       }));
 
       return {

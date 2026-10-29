@@ -15,6 +15,20 @@
       "when": 1786930851054,
       "tag": "0001_messy_wild_child",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787000000000,
+      "tag": "0002_preserve_tests_on_class_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787100000000,
+      "tag": "0003_tests_m1_m2_mi_and_class_end_date",
+      "breakpoints": true
     }
   ]
 }

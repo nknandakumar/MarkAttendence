@@ -138,11 +138,13 @@ export async function GET(req: NextRequest) {
         const lastAttendedDate = lastActiveMap.get(student.id) || 'N/A';
 
         return {
+          id: student.id,
           studentId: student.id,
           name: student.name,
           phone: student.phone,
           totalClasses: enrolledClasses.length,
           enrolledClassNames: enrolledClasses.map((e) => e.className).join(', '),
+          classes: enrolledClasses.map((e) => ({ id: e.classId, name: e.className })),
           totalSessions,
           present: presentCount,
           totalAttended: presentCount,

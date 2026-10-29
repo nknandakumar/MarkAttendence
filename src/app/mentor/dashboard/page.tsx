@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Plus,
   Clock,
+  Calendar,
 } from 'lucide-react';
 import { fetchWithCache } from '@/lib/cache/client-cache';
 
@@ -24,6 +25,14 @@ function getISTTimeStr() {
   const h = istDate.getUTCHours();
   const m = istDate.getUTCMinutes();
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Returns current date in IST as "YYYY-MM-DD" */
+function getISTDateStr() {
+  const now = new Date();
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const istDate = new Date(now.getTime() + istOffsetMs);
+  return istDate.toISOString().split('T')[0];
 }
 
 /** Convert 24h "HH:MM" to "H:MM AM/PM" */
@@ -40,11 +49,13 @@ export default function MentorDashboardPage() {
   const [classes, setClasses] = useState<any[]>([]);
   const [totalStudentsCount, setTotalStudentsCount] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState(getISTTimeStr());
+  const [todayDateStr, setTodayDateStr] = useState(getISTDateStr());
 
   // Update current time every minute so absent count can update automatically
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(getISTTimeStr());
+      setTodayDateStr(getISTDateStr());
     }, 60 * 1000);
     return () => clearInterval(interval);
   }, []);
@@ -54,8 +65,6 @@ export default function MentorDashboardPage() {
       setLoading(true);
     }
     try {
-      // Single request returns mentor info + classes + total students count
-      // Cached 15s server-side — handles concurrent load from 50+ students
       const data = await fetchWithCache('/api/dashboard', 15_000);
       if (!data || !data.success) {
         window.location.href = '/mentor/login';
@@ -78,11 +87,15 @@ export default function MentorDashboardPage() {
   const totalTodayPresent = classes.reduce((sum, c) => sum + (c.todayPresent || 0), 0);
 
   /**
-   * Determines whether the absent count should be shown for a class.
-   * Rule: Absent number is only shown AFTER the session end time has passed.
-   * Until the session is done, absent count shows '–'.
+   * Determines whether the absent count should be shown for a class today.
+   * Rules:
+   * 1. If course has an end date and today is past the end date -> Course completed! Don't show absent.
+   * 2. If course has a start date in the future -> Course hasn't started! Don't show absent.
+   * 3. Otherwise, absent number is only shown AFTER the session end time has passed.
    */
   function shouldShowAbsent(cls: any): boolean {
+    if (cls.endDate && todayDateStr > cls.endDate) return false;
+    if (cls.startDate && todayDateStr < cls.startDate) return false;
     if (!cls.sessionEnd) return false;
     return currentTime >= cls.sessionEnd;
   }
@@ -104,13 +117,22 @@ export default function MentorDashboardPage() {
             </p>
           </div>
 
-          <Link
-            href="/mentor/classes"
-            className="btn-primary shrink-0"
-          >
-            <Plus className="w-4 h-4 shrink-0" />
-            <span>Manage Classes</span>
-          </Link>
+          <div className="flex items-center space-x-2 shrink-0">
+            <Link
+              href="/mentor/students"
+              className="btn-secondary"
+            >
+              <Users className="w-4 h-4 shrink-0" />
+              <span>Student Directory</span>
+            </Link>
+            <Link
+              href="/mentor/classes"
+              className="btn-primary"
+            >
+              <Plus className="w-4 h-4 shrink-0" />
+              <span>Manage Classes</span>
+            </Link>
+          </div>
         </div>
 
         {/* Metrics Grid */}
@@ -125,15 +147,20 @@ export default function MentorDashboardPage() {
             </div>
           </div>
 
-          <div className="ui-card p-5 flex items-center justify-between">
+          {/* Total Students Card — Links to /mentor/students */}
+          <Link
+            href="/mentor/students"
+            className="ui-card p-5 flex items-center justify-between hover:border-[#737373] transition group"
+            title="View Student Directory"
+          >
             <div className="space-y-1">
               <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider">Total Students</span>
               <p className="text-3xl font-bold tracking-[-0.75px] text-[#0a0a0a]">{totalStudentsCount}</p>
             </div>
-            <div className="w-10 h-10 rounded-[18px] bg-[#f5f5f5] border border-[#e5e5e5] text-[#0a0a0a] flex items-center justify-center">
+            <div className="w-10 h-10 rounded-[18px] bg-[#f5f5f5] border border-[#e5e5e5] text-[#0a0a0a] flex items-center justify-center group-hover:bg-[#0a0a0a] group-hover:text-white transition">
               <Users className="w-5 h-5 shrink-0" />
             </div>
-          </div>
+          </Link>
 
           <div className="ui-card p-5 flex items-center justify-between">
             <div className="space-y-1">
@@ -193,6 +220,8 @@ export default function MentorDashboardPage() {
                 const todayAbsent = Math.max(0, totalStudents - todayPresent);
                 const percentage = totalStudents > 0 ? Math.round((todayPresent / totalStudents) * 100) : 0;
                 const showAbsent = shouldShowAbsent(cls);
+                const isCourseCompleted = Boolean(cls.endDate && todayDateStr > cls.endDate);
+                const isCourseNotStarted = Boolean(cls.startDate && todayDateStr < cls.startDate);
 
                 return (
                   <div
@@ -210,28 +239,53 @@ export default function MentorDashboardPage() {
                       </div>
                     </div>
 
-                    {/* Session timing indicator */}
-                    {cls.sessionStart && cls.sessionEnd && (
-                      <div className="flex items-center space-x-1.5 px-2 py-1 bg-[#f0f9ff] border border-[#bae6fd] rounded-[8px] w-fit">
-                        <Clock className="w-3 h-3 text-[#0284c7] shrink-0" />
-                        <span className="text-[10px] font-semibold text-[#0284c7]">
-                          {formatTime12h(cls.sessionStart)} – {formatTime12h(cls.sessionEnd)}
+                    {/* Session timing and course completion badges */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {cls.sessionStart && cls.sessionEnd && (
+                        <div className="flex items-center space-x-1.5 px-2 py-1 bg-[#f0f9ff] border border-[#bae6fd] rounded-[8px] w-fit">
+                          <Clock className="w-3 h-3 text-[#0284c7] shrink-0" />
+                          <span className="text-[10px] font-semibold text-[#0284c7]">
+                            {formatTime12h(cls.sessionStart)} – {formatTime12h(cls.sessionEnd)}
+                          </span>
+                        </div>
+                      )}
+                      {isCourseCompleted ? (
+                        <span className="inline-flex items-center space-x-1 px-2 py-1 bg-[#fef2f2] border border-[#fecaca] rounded-[8px] text-[10px] font-bold text-[#e7000b]">
+                          <span>Completed ({cls.endDate})</span>
                         </span>
-                      </div>
-                    )}
+                      ) : cls.endDate ? (
+                        <span className="inline-flex items-center space-x-1 px-2 py-1 bg-[#fafafa] border border-[#e5e5e5] rounded-[8px] text-[10px] text-[#737373]">
+                          <Calendar className="w-3 h-3 shrink-0" />
+                          <span>Ends: {cls.endDate}</span>
+                        </span>
+                      ) : null}
+                    </div>
 
+                    {/* Attendance Grid Box */}
                     <div className="grid grid-cols-3 gap-2 text-center py-2.5 bg-[#fafafa] rounded-[18px] border border-[#e5e5e5]">
-                      <div>
+                      <Link
+                        href={`/mentor/students?classId=${cls.id}`}
+                        className="cursor-pointer hover:opacity-80 transition block"
+                        title="Click to view enrolled students"
+                      >
                         <span className="block text-[10px] text-[#737373] uppercase font-semibold">Enrolled</span>
-                        <span className="text-xs font-bold text-[#0a0a0a]">{totalStudents}</span>
-                      </div>
+                        <span className="text-xs font-bold text-[#0a0a0a] hover:underline">{totalStudents}</span>
+                      </Link>
                       <div>
                         <span className="block text-[10px] text-[#737373] uppercase font-semibold">Present</span>
                         <span className="text-xs font-bold text-[#0a0a0a]">{todayPresent}</span>
                       </div>
                       <div>
                         <span className="block text-[10px] text-[#737373] uppercase font-semibold">Absent</span>
-                        {showAbsent ? (
+                        {isCourseCompleted ? (
+                          <span className="text-[10px] font-bold text-[#16a34a] bg-[#f0fdf4] px-1 py-0.5 rounded" title={`Course completed on ${cls.endDate}. Not marked absent.`}>
+                            Ended
+                          </span>
+                        ) : isCourseNotStarted ? (
+                          <span className="text-[10px] font-medium text-[#737373]" title={`Starts on ${cls.startDate}`}>
+                            –
+                          </span>
+                        ) : showAbsent ? (
                           <span className="text-xs font-bold text-[#737373]">{todayAbsent}</span>
                         ) : (
                           <span
@@ -260,13 +314,13 @@ export default function MentorDashboardPage() {
                     <div className="pt-2 flex items-center justify-between gap-2 text-xs">
                       <Link
                         href={`/mentor/attendance?classId=${cls.id}`}
-                        className="btn-secondary flex-1 !py-1.5 !px-3 !text-xs"
+                        className="btn-secondary flex-1 !py-1.5 !px-3 !text-xs text-center"
                       >
                         Attendance
                       </Link>
                       <Link
                         href={`/mentor/students?classId=${cls.id}`}
-                        className="btn-outline flex-1 !py-1.5 !px-3 !text-xs"
+                        className="btn-outline flex-1 !py-1.5 !px-3 !text-xs text-center"
                       >
                         Students
                       </Link>
@@ -279,6 +333,7 @@ export default function MentorDashboardPage() {
         </div>
 
       </main>
+
     </div>
   );
 }

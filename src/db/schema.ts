@@ -43,6 +43,9 @@ export const classes = pgTable('classes', {
   // Session window: "HH:MM" in 24h format (e.g. "10:00", "11:10"). Null = no restriction.
   sessionStart: varchar('session_start', { length: 5 }),
   sessionEnd: varchar('session_end', { length: 5 }),
+  // Course timeline dates: "YYYY-MM-DD". Optional / non-strict
+  startDate: varchar('start_date', { length: 10 }),
+  endDate: varchar('end_date', { length: 10 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -120,18 +123,22 @@ export const holidays = pgTable(
 );
 
 /**
- * tests — Assessments / Mock tests conducted for a class.
+ * tests — Assessments / Mock evaluations conducted for a class.
+ * By default includes Mock Test 1 (M1), Mock Test 2 (M2), and Mock Interview (MI).
  */
 export const tests = pgTable(
   'tests',
   {
     id: serial('id').primaryKey(),
     classId: integer('class_id')
-      .notNull()
-      .references(() => classes.id, { onDelete: 'cascade' }),
+      .references(() => classes.id, { onDelete: 'set null' }),
+    className: varchar('class_name', { length: 255 }).notNull(),
     title: varchar('title', { length: 255 }).notNull(),
     testDate: varchar('test_date', { length: 10 }).notNull(), // YYYY-MM-DD
-    maxMarks: integer('max_marks').notNull(),
+    maxMarks: integer('max_marks').notNull(), // Combined total max marks
+    maxMarksM1: integer('max_marks_m1').default(50).notNull(),
+    maxMarksM2: integer('max_marks_m2').default(50).notNull(),
+    maxMarksMI: integer('max_marks_mi').default(50).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -142,7 +149,7 @@ export const tests = pgTable(
 );
 
 /**
- * test_marks — Student scored marks for a specific test.
+ * test_marks — Student scored marks for a specific test across M1, M2, and MI.
  */
 export const testMarks = pgTable(
   'test_marks',
@@ -154,8 +161,14 @@ export const testMarks = pgTable(
     studentId: integer('student_id')
       .notNull()
       .references(() => students.id, { onDelete: 'cascade' }),
-    marksObtained: integer('marks_obtained'), // integer marks (nullable if absent or unmarked)
+    marksObtained: integer('marks_obtained'), // Total marks scored
     isAbsent: boolean('is_absent').default(false).notNull(),
+    marksM1: integer('marks_m1'),
+    isAbsentM1: boolean('is_absent_m1').default(false).notNull(),
+    marksM2: integer('marks_m2'),
+    isAbsentM2: boolean('is_absent_m2').default(false).notNull(),
+    marksMI: integer('marks_mi'),
+    isAbsentMI: boolean('is_absent_mi').default(false).notNull(),
     notes: text('notes'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),

@@ -19,60 +19,64 @@ export async function GET(req: NextRequest) {
     const classIdParam = searchParams.get('classId');
     const classId = classIdParam ? parseInt(classIdParam, 10) : null;
 
-    // 1. Fetch tests joined with classes
-    let query = db
-      .select({
-        id: tests.id,
-        classId: tests.classId,
-        className: classes.name,
-        title: tests.title,
-        testDate: tests.testDate,
-        maxMarks: tests.maxMarks,
-        createdAt: tests.createdAt,
-        updatedAt: tests.updatedAt,
-      })
-      .from(tests)
-      .innerJoin(classes, eq(tests.classId, classes.id))
-      .orderBy(desc(tests.testDate), desc(tests.id));
-
+    // 1. Fetch tests — LEFT JOIN with classes since class may have been deleted
     const testList = classId && !isNaN(classId)
       ? await db
           .select({
             id: tests.id,
             classId: tests.classId,
-            className: classes.name,
+            className: tests.className,
             title: tests.title,
             testDate: tests.testDate,
             maxMarks: tests.maxMarks,
+            maxMarksM1: tests.maxMarksM1,
+            maxMarksM2: tests.maxMarksM2,
+            maxMarksMI: tests.maxMarksMI,
             createdAt: tests.createdAt,
             updatedAt: tests.updatedAt,
           })
           .from(tests)
-          .innerJoin(classes, eq(tests.classId, classes.id))
           .where(eq(tests.classId, classId))
           .orderBy(desc(tests.testDate), desc(tests.id))
-      : await query;
+      : await db
+          .select({
+            id: tests.id,
+            classId: tests.classId,
+            className: tests.className,
+            title: tests.title,
+            testDate: tests.testDate,
+            maxMarks: tests.maxMarks,
+            maxMarksM1: tests.maxMarksM1,
+            maxMarksM2: tests.maxMarksM2,
+            maxMarksMI: tests.maxMarksMI,
+            createdAt: tests.createdAt,
+            updatedAt: tests.updatedAt,
+          })
+          .from(tests)
+          .orderBy(desc(tests.testDate), desc(tests.id));
 
     if (testList.length === 0) {
       return NextResponse.json({ success: true, tests: [] });
     }
 
     const testIds = testList.map((t) => t.id);
-    const classIds = Array.from(new Set(testList.map((t) => t.classId)));
+    const classIds = Array.from(new Set(testList.map((t) => t.classId).filter((id): id is number => id !== null)));
 
-    // 2. Fetch enrolled student counts per class in one query
-    const enrolledCounts = await db
-      .select({
-        classId: classStudents.classId,
-        count: sql<number>`cast(count(${classStudents.studentId}) as int)`,
-      })
-      .from(classStudents)
-      .where(inArray(classStudents.classId, classIds))
-      .groupBy(classStudents.classId);
+    // 2. Fetch enrolled student counts per class in one query (only for active classes)
+    let enrolledMap = new Map<number, number>();
+    if (classIds.length > 0) {
+      const enrolledCounts = await db
+        .select({
+          classId: classStudents.classId,
+          count: sql<number>`cast(count(${classStudents.studentId}) as int)`,
+        })
+        .from(classStudents)
+        .where(inArray(classStudents.classId, classIds))
+        .groupBy(classStudents.classId);
 
-    const enrolledMap = new Map<number, number>();
-    for (const row of enrolledCounts) {
-      enrolledMap.set(row.classId, row.count);
+      for (const row of enrolledCounts) {
+        enrolledMap.set(row.classId, row.count);
+      }
     }
 
     // 3. Fetch all marks records for these tests
@@ -99,7 +103,7 @@ export async function GET(req: NextRequest) {
     // 4. Compute statistics for each test
     const enrichedTests = testList.map((test) => {
       const marks = marksByTest.get(test.id) || [];
-      const enrolledCount = enrolledMap.get(test.classId) || 0;
+      const enrolledCount = test.classId ? (enrolledMap.get(test.classId) || 0) : 0;
 
       const scoredMarks = marks.filter((m) => !m.isAbsent && m.marksObtained !== null && m.marksObtained !== undefined);
       const absentCount = marks.filter((m) => m.isAbsent).length;
@@ -127,6 +131,7 @@ export async function GET(req: NextRequest) {
 
       return {
         ...test,
+        classDeleted: test.classId === null,
         enrolledCount,
         gradedCount,
         absentCount,
@@ -171,9 +176,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { classId, title, testDate, maxMarks } = parseResult.data;
+    const { classId, title, testDate, maxMarksM1 = 50, maxMarksM2 = 50, maxMarksMI = 50 } = parseResult.data;
+    const computedMaxMarks = parseResult.data.maxMarks ?? (maxMarksM1 + maxMarksM2 + maxMarksMI);
 
-    // Check class exists
+    // Check class exists and get class name to store
     const cls = await db
       .select({ id: classes.id, name: classes.name })
       .from(classes)
@@ -191,9 +197,13 @@ export async function POST(req: NextRequest) {
       .insert(tests)
       .values({
         classId,
+        className: cls[0].name,
         title: title.trim(),
         testDate,
-        maxMarks,
+        maxMarks: computedMaxMarks,
+        maxMarksM1,
+        maxMarksM2,
+        maxMarksMI,
       })
       .returning();
 
@@ -204,7 +214,6 @@ export async function POST(req: NextRequest) {
       message: 'Test created successfully.',
       test: {
         ...newTest,
-        className: cls[0].name,
       },
     });
   } catch (error) {

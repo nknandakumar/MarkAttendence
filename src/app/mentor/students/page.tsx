@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import MentorNavbar from '@/components/mentor/Navbar';
 import {
   Users,
@@ -14,14 +14,15 @@ import {
   RefreshCw,
   X,
   FileSpreadsheet,
-  BookOpen,
+  Download,
 } from 'lucide-react';
 import { fetchWithCache, invalidateCache } from '@/lib/cache/client-cache';
+import * as XLSX from 'xlsx';
 
 export default function StudentManagementPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [mentor, setMentor] = useState<any>(null);
   const [search, setSearch] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState('');
@@ -59,10 +60,12 @@ export default function StudentManagementPage() {
   }, []);
 
   const loadData = async (forceFresh = false) => {
+    setLoading(true);
     if (forceFresh) {
+      invalidateCache('/api/reports?type=students');
       invalidateCache('/api/students');
     }
-    
+
     try {
       // Mentor profile
       const meData = await fetchWithCache('/api/mentor/me', 60 * 1000);
@@ -72,32 +75,27 @@ export default function StudentManagementPage() {
       }
       setMentor(meData.mentor);
 
-      // Classes dropdown list
+      // Classes list
       const classData = await fetchWithCache('/api/classes', 30 * 1000);
       if (classData && classData.success) {
-        setClasses(classData.classes);
+        setClasses(classData.classes || []);
       }
 
-      // If no class filter is selected, do NOT fetch all students
-      if (!selectedClassFilter) {
+      // Fetch student roster with full attendance statistics
+      const reportUrl = `/api/reports?type=students${
+        selectedClassFilter ? `&classId=${selectedClassFilter}` : ''
+      }`;
+      const reportRes = forceFresh
+        ? await fetch(reportUrl).then((r) => r.json())
+        : await fetchWithCache(reportUrl, 15 * 1000);
+
+      if (reportRes && reportRes.success) {
+        setStudents(reportRes.reports || []);
+      } else {
         setStudents([]);
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-
-      // Fetch students for the selected class ONLY
-      const studUrl = `/api/students?classId=${selectedClassFilter}`;
-      const studData = forceFresh
-        ? await fetch(studUrl).then((r) => r.json())
-        : await fetchWithCache(studUrl, 20 * 1000);
-
-      if (studData && studData.success) {
-        setStudents(studData.students);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error loading student records:', err);
     } finally {
       setLoading(false);
     }
@@ -215,21 +213,45 @@ export default function StudentManagementPage() {
     }
   };
 
-  const filteredStudents = students.filter((s) => {
-    const matchesSearch =
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.phone.includes(search);
-    return matchesSearch;
-  });
+  // Filter students by search
+  const filteredStudents = useMemo(() => {
+    if (!search.trim()) return students;
+    const q = search.toLowerCase();
+    return students.filter(
+      (s) => s.name?.toLowerCase().includes(q) || s.phone?.includes(q)
+    );
+  }, [students, search]);
 
   const selectedClassName = classes.find((c) => String(c.id) === selectedClassFilter)?.name;
+
+  // Export to Excel
+  const handleExportExcel = (dataToExport: any[]) => {
+    const filename = `Student_Directory_${
+      selectedClassName ? selectedClassName.replace(/[^a-zA-Z0-9]/g, '_') : 'All_Classes'
+    }_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    const exportData = dataToExport.map((s, index) => ({
+      '#': index + 1,
+      'Student Name': s.name,
+      'Phone Number': s.phone,
+      'Enrolled Classes': s.enrolledClassNames || '–',
+      'Total Sessions': s.totalSessions,
+      'Present': s.present ?? s.totalAttended,
+      'Absent': s.absent,
+      'Attendance Rate': `${s.attendanceRate}%`,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Students');
+    XLSX.writeFile(wb, filename);
+  };
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] text-[#0a0a0a] flex flex-col">
       <MentorNavbar mentorName={mentor?.name} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -237,11 +259,20 @@ export default function StudentManagementPage() {
               Student Directory
             </h1>
             <p className="text-sm text-[#737373]">
-              Manage registered students, phone numbers, and subject class enrollments.
+              Manage registered students, live attendance metrics, and class enrollments.
             </p>
           </div>
 
           <div className="flex items-center space-x-2 shrink-0">
+            <button
+              onClick={() => handleExportExcel(filteredStudents)}
+              className="btn-secondary"
+              title="Download filtered roster to Excel"
+            >
+              <Download className="w-4 h-4 shrink-0" />
+              <span>Export Excel</span>
+            </button>
+
             <button
               onClick={() => {
                 setImportFile(null);
@@ -268,36 +299,37 @@ export default function StudentManagementPage() {
 
         {/* Toast Alert */}
         {notification && (
-          <div className="flex items-center space-x-2 p-3 bg-[#fafafa] border border-[#e5e5e5] rounded-[18px] text-[#0a0a0a] text-xs font-semibold">
-            <CheckCircle2 className="w-4 h-4 text-[#0a0a0a] shrink-0" />
+          <div className="flex items-center space-x-2 p-3 bg-[#fafafa] border border-[#e5e5e5] rounded-[18px] text-[#0a0a0a] text-xs font-semibold shadow-xs">
+            <CheckCircle2 className="w-4 h-4 text-[#16a34a] shrink-0" />
             <span>{notification}</span>
           </div>
         )}
 
-        {/* Filters & Search Toolbar */}
-        <div className="ui-card p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center space-x-2.5 w-full sm:w-auto flex-1 ml-1">
+        {/* Filters Toolbar (Matches Screenshot: Search on left, FILTER CLASS on right) */}
+        <div className="bg-[#ffffff] border border-[#e5e5e5] rounded-[18px] px-5 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center space-x-2.5 w-full sm:w-auto flex-1">
             <Search className="w-4 h-4 text-[#737373] shrink-0" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by student name or phone..."
-              disabled={!selectedClassFilter}
-              className="w-full bg-transparent border-none text-[#0a0a0a] placeholder-[#737373] text-sm focus:outline-none font-medium disabled:opacity-40"
+              placeholder="Filter student by name or phone..."
+              className="w-full bg-transparent border-none text-[#0a0a0a] placeholder-[#737373] text-sm focus:outline-none font-medium"
             />
           </div>
 
-          <div className="flex items-center space-x-2 w-full sm:w-auto shrink-0">
-            <span className="text-xs font-semibold text-[#737373] uppercase tracking-wider whitespace-nowrap">Select Class:</span>
+          <div className="flex items-center space-x-2.5 w-full sm:w-auto shrink-0">
+            <span className="text-xs font-bold text-[#737373] uppercase tracking-wider whitespace-nowrap">
+              FILTER CLASS:
+            </span>
             <select
               value={selectedClassFilter}
               onChange={(e) => setSelectedClassFilter(e.target.value)}
-              className="px-3 py-1.5 ui-input text-xs font-semibold text-[#0a0a0a] cursor-pointer"
+              className="px-3.5 py-1.5 ui-input text-xs font-bold text-[#0a0a0a] cursor-pointer min-w-[180px]"
             >
-              <option value="">-- Select Class --</option>
+              <option value="">All Classes</option>
               {classes.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={String(c.id)}>
                   {c.name}
                 </option>
               ))}
@@ -305,102 +337,131 @@ export default function StudentManagementPage() {
           </div>
         </div>
 
-        {/* Main Content Area */}
-        {!selectedClassFilter ? (
-          /* Empty state: No class selected */
-          <div className="ui-card p-12 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-[#fafafa] border border-[#e5e5e5] flex items-center justify-center mx-auto text-[#737373]">
-              <BookOpen className="w-6 h-6 shrink-0 text-[#0a0a0a]" />
+        {/* Excel-Style Spreadsheet Table */}
+        <div className="bg-[#ffffff] border border-[#e5e5e5] rounded-[18px] overflow-hidden shadow-xs">
+          {loading ? (
+            <div className="py-20 text-center text-[#737373] space-y-2">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#0a0a0a]" />
+              <p className="text-sm font-medium">Loading student directory...</p>
             </div>
-            <h3 className="text-lg font-bold text-[#0a0a0a]">Select a Class</h3>
-            <p className="text-xs text-[#737373] max-w-sm mx-auto leading-relaxed">
-              Please choose a class from the dropdown above to view its enrolled students.
-            </p>
-          </div>
-        ) : loading ? (
-          /* Loading state */
-          <div className="py-12 text-center text-[#737373] space-y-2">
-            <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#0a0a0a] shrink-0" />
-            <p className="text-sm">Loading enrolled students...</p>
-          </div>
-        ) : filteredStudents.length === 0 ? (
-          /* Empty state: Class selected but zero students */
-          <div className="ui-card p-12 text-center space-y-3">
-            <AlertCircle className="w-6 h-6 text-[#737373] mx-auto shrink-0" />
-            <p className="text-sm font-semibold text-[#0a0a0a]">No students enrolled in {selectedClassName}.</p>
-            <p className="text-xs text-[#737373]">Click "Register Student" or "Import Excel" to add students to this class.</p>
-          </div>
-        ) : (
-          /* Students Table */
-          <div className="ui-card overflow-hidden">
-            <div className="px-5 py-3 bg-[#fafafa] border-b border-[#e5e5e5] flex items-center justify-between">
-              <span className="text-xs font-bold text-[#0a0a0a] uppercase tracking-wider">
-                {selectedClassName} — Enrolled Students ({filteredStudents.length})
-              </span>
+          ) : filteredStudents.length === 0 ? (
+            <div className="py-16 text-center text-[#737373] space-y-3">
+              <Users className="w-8 h-8 mx-auto text-[#737373]" />
+              <p className="text-base font-semibold text-[#0a0a0a]">No students found.</p>
+              <p className="text-xs text-[#737373] max-w-sm mx-auto">
+                {selectedClassFilter
+                  ? `No students are enrolled in ${selectedClassName || 'this class'}. Click "Register Student" or "Import Excel" to add students.`
+                  : 'No student records available. Register a student or import from Excel to get started.'}
+              </p>
             </div>
+          ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-[#ffffff] border-b border-[#e5e5e5] text-[11px] font-semibold uppercase tracking-wider text-[#737373]">
+              <table className="w-full text-left text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '50px' }} />
+                  <col style={{ width: '22%' }} />
+                  <col style={{ width: '130px' }} />
+                  <col style={{ width: '26%' }} />
+                  <col style={{ width: '110px' }} />
+                  <col style={{ width: '85px' }} />
+                  <col style={{ width: '85px' }} />
+                  <col style={{ width: '85px' }} />
+                  <col style={{ width: '90px' }} />
+                </colgroup>
+                <thead className="bg-[#f0f0f0] border-b-2 border-[#d4d4d4] text-[11px] font-bold uppercase tracking-wider text-[#525252] sticky top-0 z-10">
                   <tr>
-                    <th className="py-3 px-4 w-12 text-center">#</th>
-                    <th className="py-3 px-5">Student Name</th>
-                    <th className="py-3 px-5">Phone Number</th>
-                    <th className="py-3 px-5">Enrolled Classes</th>
-                    <th className="py-3 px-5 text-right">Actions</th>
+                    <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">#</th>
+                    <th className="py-3 px-4 border-r border-[#d4d4d4]">STUDENT NAME</th>
+                    <th className="py-3 px-3 border-r border-[#d4d4d4]">PHONE</th>
+                    <th className="py-3 px-4 border-r border-[#d4d4d4]">ENROLLED CLASSES</th>
+                    <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">TOTAL SESSIONS</th>
+                    <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">PRESENT</th>
+                    <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">ABSENT</th>
+                    <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">RATE</th>
+                    <th className="py-3 px-3 text-center">ACTIONS</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#e5e5e5] text-sm">
-                  {filteredStudents.map((student, idx) => (
-                    <tr key={student.id} className="hover:bg-[#fafafa] transition">
-                      <td className="py-3.5 px-4 text-center font-mono text-xs text-[#737373] font-medium">
-                        {idx + 1}
-                      </td>
-                      <td className="py-3.5 px-5 font-semibold text-[#0a0a0a]">
-                        {student.name}
-                      </td>
-                      <td className="py-3.5 px-5 font-mono text-xs text-[#737373]">
-                        {student.phone}
-                      </td>
-                      <td className="py-3.5 px-5">
-                        <div className="flex flex-wrap gap-1">
-                          {student.classes && student.classes.length > 0 ? (
-                            student.classes.map((cls: any) => (
-                              <span
-                                key={cls.id}
-                                className="badge-soft"
-                              >
-                                {cls.name}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-xs text-[#737373] italic">Not enrolled</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-5 text-right space-x-1">
-                        <button
-                          onClick={() => openEditModal(student)}
-                          className="p-1 rounded-[18px] text-[#737373] hover:text-[#0a0a0a] hover:bg-[#f5f5f5]"
-                          title="Edit Student"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 shrink-0" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(student.id, student.name)}
-                          className="p-1 rounded-[18px] text-[#737373] hover:text-[#e7000b] hover:bg-[#f5f5f5]"
-                          title="Delete Student"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="text-sm">
+                  {filteredStudents.map((s, idx) => {
+                    const rate = Number(s.attendanceRate ?? 0);
+                    return (
+                      <tr
+                        key={s.id || s.studentId}
+                        className={`border-b border-[#e5e5e5] transition-colors ${
+                          idx % 2 === 0 ? 'bg-[#ffffff]' : 'bg-[#fafafa]'
+                        } hover:bg-[#f0f4ff]`}
+                      >
+                        <td className="py-3.5 px-3 text-center font-mono text-xs text-[#737373] border-r border-[#e5e5e5]">
+                          {idx + 1}
+                        </td>
+                        <td className="py-3.5 px-4 font-bold text-[#0a0a0a] text-xs sm:text-sm truncate border-r border-[#e5e5e5]">
+                          {s.name}
+                        </td>
+                        <td className="py-3.5 px-3 font-mono text-xs text-[#737373] border-r border-[#e5e5e5]">
+                          {s.phone}
+                        </td>
+                        <td className="py-3.5 px-4 text-xs text-[#525252] truncate border-r border-[#e5e5e5]" title={s.enrolledClassNames}>
+                          {s.enrolledClassNames || '–'}
+                        </td>
+                        <td className="py-3.5 px-3 text-center text-xs font-bold text-[#0a0a0a] border-r border-[#e5e5e5]">
+                          {s.totalSessions ?? 0}
+                        </td>
+                        <td className="py-3.5 px-3 text-center text-xs font-bold text-[#16a34a] border-r border-[#e5e5e5]">
+                          {s.present ?? s.totalAttended ?? 0}
+                        </td>
+                        <td className="py-3.5 px-3 text-center text-xs font-bold text-[#dc2626] border-r border-[#e5e5e5]">
+                          {s.absent ?? 0}
+                        </td>
+                        <td className="py-3.5 px-3 text-center text-xs font-bold border-r border-[#e5e5e5]">
+                          <span
+                            className={
+                              rate >= 75
+                                ? 'text-[#16a34a]'
+                                : rate >= 50
+                                ? 'text-[#d97706]'
+                                : 'text-[#dc2626]'
+                            }
+                          >
+                            {rate}%
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 text-center space-x-1">
+                          <button
+                            onClick={() => openEditModal(s)}
+                            className="p-1 rounded-[10px] text-[#737373] hover:text-[#0a0a0a] hover:bg-[#e5e5e5] transition"
+                            title="Edit Student"
+                          >
+                            <Edit2 className="w-3.5 h-3.5 shrink-0 inline" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(s.id || s.studentId, s.name)}
+                            className="p-1 rounded-[10px] text-[#737373] hover:text-[#dc2626] hover:bg-[#e5e5e5] transition"
+                            title="Delete Student"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 shrink-0 inline" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
+          )}
 
+          {/* Table Footer */}
+          {!loading && filteredStudents.length > 0 && (
+            <div className="px-5 py-3 bg-[#fafafa] border-t border-[#e5e5e5] flex items-center justify-between text-xs text-[#737373]">
+              <span>
+                Showing <strong>{filteredStudents.length}</strong> {filteredStudents.length === 1 ? 'student' : 'students'}
+                {selectedClassName ? ` in ${selectedClassName}` : ''}
+              </span>
+              <span className="text-[11px] font-medium text-[#737373]">
+                Excel-Style Student Records
+              </span>
+            </div>
+          )}
+        </div>
       </main>
 
       {/* Add / Edit Student Modal */}
@@ -617,7 +678,6 @@ export default function StudentManagementPage() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

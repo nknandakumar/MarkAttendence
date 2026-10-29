@@ -73,6 +73,8 @@ export async function GET() {
         todayPresent: attendanceCountMap.get(cls.id) ?? 0,
         sessionStart: cls.sessionStart ?? null,
         sessionEnd: cls.sessionEnd ?? null,
+        startDate: cls.startDate ?? null,
+        endDate: cls.endDate ?? null,
       }));
     });
 
@@ -106,7 +108,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { name, description, isActive, sessionStart, sessionEnd } = parseResult.data;
+    const { name, description, isActive, sessionStart, sessionEnd, startDate, endDate } = parseResult.data;
 
     // Check duplicate name
     const existing = await db
@@ -130,6 +132,8 @@ export async function POST(req: NextRequest) {
         isActive: isActive ?? true,
         sessionStart: sessionStart || null,
         sessionEnd: sessionEnd || null,
+        startDate: startDate || null,
+        endDate: endDate || null,
       })
       .returning();
 

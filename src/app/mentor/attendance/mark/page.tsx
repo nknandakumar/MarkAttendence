@@ -213,11 +213,14 @@ export default function AdminManualAttendancePage() {
                     className="w-full bg-transparent border-none text-[#0a0a0a] text-sm font-medium focus:outline-none cursor-pointer"
                   >
                     <option value="" disabled>-- Select Subject / Class --</option>
-                    {classes.map((cls) => (
-                      <option key={cls.id} value={cls.id}>
-                        {cls.name}
-                      </option>
-                    ))}
+                    {classes.map((cls) => {
+                      const isCompleted = cls.endDate && new Date().toISOString().split('T')[0] > cls.endDate;
+                      return (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.name} {isCompleted ? '(Course Completed)' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>

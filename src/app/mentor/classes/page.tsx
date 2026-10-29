@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Search,
   Clock,
+  Calendar,
   X,
 } from 'lucide-react';
 import { fetchWithCache, invalidateCache } from '@/lib/cache/client-cache';
@@ -39,6 +40,8 @@ export default function MentorClassesPage() {
   const [description, setDescription] = useState('');
   const [sessionStart, setSessionStart] = useState('');
   const [sessionEnd, setSessionEnd] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -81,6 +84,8 @@ export default function MentorClassesPage() {
     setDescription('');
     setSessionStart('');
     setSessionEnd('');
+    setStartDate(new Date().toISOString().split('T')[0]);
+    setEndDate('');
     setError('');
     setIsModalOpen(true);
   };
@@ -91,6 +96,8 @@ export default function MentorClassesPage() {
     setDescription(cls.description || '');
     setSessionStart(cls.sessionStart || '');
     setSessionEnd(cls.sessionEnd || '');
+    setStartDate(cls.startDate || '');
+    setEndDate(cls.endDate || '');
     setError('');
     setIsModalOpen(true);
   };
@@ -109,6 +116,12 @@ export default function MentorClassesPage() {
       return;
     }
 
+    // Validate dates if both provided
+    if (startDate && endDate && startDate > endDate) {
+      setError('Course end date cannot be earlier than course start date.');
+      return;
+    }
+
     setSaving(true);
     setError('');
 
@@ -124,6 +137,8 @@ export default function MentorClassesPage() {
           description: description.trim(),
           sessionStart: sessionStart || null,
           sessionEnd: sessionEnd || null,
+          startDate: startDate || null,
+          endDate: endDate || null,
         }),
       });
 
@@ -274,6 +289,21 @@ export default function MentorClassesPage() {
                       <span className="text-[10px] font-medium text-[#a3a3a3]">No time restriction</span>
                     </div>
                   )}
+
+                  {/* Course Timeline (Start & End Date) */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <div className="flex items-center space-x-1 px-2.5 py-1 bg-[#fafafa] border border-[#e5e5e5] rounded-[10px] text-[11px] text-[#737373]">
+                      <Calendar className="w-3 h-3 text-[#0a0a0a] shrink-0" />
+                      <span>
+                        {cls.startDate ? cls.startDate : 'Start: Not set'} → {cls.endDate ? cls.endDate : 'Ongoing'}
+                      </span>
+                    </div>
+                    {cls.endDate && new Date().toISOString().split('T')[0] > cls.endDate && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#fef2f2] text-[#e7000b] border border-[#fecaca]">
+                        Course Completed
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="pt-3 border-t border-[#e5e5e5] flex items-center justify-between text-xs text-[#737373]">
@@ -321,7 +351,7 @@ export default function MentorClassesPage() {
 
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-[#737373] uppercase tracking-wider">
-                  Class Name
+                  Class Name <span className="text-[#e7000b]">*</span>
                 </label>
                 <input
                   type="text"
@@ -341,9 +371,45 @@ export default function MentorClassesPage() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Optional class details or schedule"
-                  rows={3}
+                  rows={2}
                   className="w-full px-3.5 py-2.5 ui-input text-sm font-medium resize-none"
                 />
+              </div>
+
+              {/* Course Timeline (Start & End Date) — non-strict */}
+              <div className="space-y-2 p-3 bg-[#fafafa] border border-[#e5e5e5] rounded-[14px]">
+                <label className="block text-xs font-semibold text-[#0a0a0a] uppercase tracking-wider">
+                  Course Timeline <span className="normal-case font-normal text-[#737373]">(Optional)</span>
+                </label>
+                <p className="text-[11px] text-[#737373] leading-relaxed">
+                  Mentors can specify the course start date now, and can add or edit the end date anytime when the course completes.
+                </p>
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-semibold text-[#737373] uppercase">Start Date</label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => {
+                        setStartDate(e.target.value);
+                        setError('');
+                      }}
+                      className="w-full px-3 py-2 ui-input text-xs font-medium"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[10px] font-semibold text-[#737373] uppercase">End Date</label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => {
+                        setEndDate(e.target.value);
+                        setError('');
+                      }}
+                      className="w-full px-3 py-2 ui-input text-xs font-medium"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Session time window */}

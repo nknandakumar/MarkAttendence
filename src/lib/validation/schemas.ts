@@ -34,6 +34,9 @@ export const mentorLoginSchema = z.object({
 // HH:MM 24h time format validator
 const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
+// YYYY-MM-DD date format validator
+const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+
 export const classSchema = z.object({
   name: z.string().min(1, 'Class name is required.').max(100),
   description: z.string().optional(),
@@ -46,6 +49,16 @@ export const classSchema = z.object({
   sessionEnd: z
     .string()
     .regex(timeRegex, 'Session end must be in HH:MM format.')
+    .optional()
+    .nullable(),
+  startDate: z
+    .string()
+    .regex(dateRegex, 'Start date must be in YYYY-MM-DD format.')
+    .optional()
+    .nullable(),
+  endDate: z
+    .string()
+    .regex(dateRegex, 'End date must be in YYYY-MM-DD format.')
     .optional()
     .nullable(),
 });
@@ -67,9 +80,6 @@ export const appSettingSchema = z.object({
   value: z.string(),
 });
 
-// YYYY-MM-DD date format validator
-const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-
 export const holidaySchema = z.object({
   date: z
     .string()
@@ -88,10 +98,14 @@ export const testSchema = z.object({
     .string()
     .regex(dateRegex, 'Test date must be in YYYY-MM-DD format.')
     .min(1, 'Test date is required.'),
+  maxMarksM1: z.number().int().positive().optional().default(50),
+  maxMarksM2: z.number().int().positive().optional().default(50),
+  maxMarksMI: z.number().int().positive().optional().default(50),
   maxMarks: z
-    .number({ required_error: 'Maximum marks is required' })
+    .number()
     .int('Maximum marks must be an integer')
-    .positive('Maximum marks must be greater than 0'),
+    .positive('Maximum marks must be greater than 0')
+    .optional(),
 });
 
 export const updateTestSchema = z.object({
@@ -101,6 +115,9 @@ export const updateTestSchema = z.object({
     .string()
     .regex(dateRegex, 'Test date must be in YYYY-MM-DD format.')
     .optional(),
+  maxMarksM1: z.number().int().positive().optional(),
+  maxMarksM2: z.number().int().positive().optional(),
+  maxMarksMI: z.number().int().positive().optional(),
   maxMarks: z
     .number()
     .int('Maximum marks must be an integer')
@@ -110,6 +127,12 @@ export const updateTestSchema = z.object({
 
 export const singleMarkSchema = z.object({
   studentId: z.number({ required_error: 'Student ID is required' }),
+  marksM1: z.number().int().min(0).nullable().optional(),
+  isAbsentM1: z.boolean().default(false),
+  marksM2: z.number().int().min(0).nullable().optional(),
+  isAbsentM2: z.boolean().default(false),
+  marksMI: z.number().int().min(0).nullable().optional(),
+  isAbsentMI: z.boolean().default(false),
   marksObtained: z.number().int().min(0).nullable().optional(),
   isAbsent: z.boolean().default(false),
   notes: z.string().optional().nullable(),

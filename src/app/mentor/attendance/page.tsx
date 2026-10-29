@@ -229,12 +229,27 @@ export default function AttendanceHistoryPage() {
             <RefreshCw className="w-5 h-5 animate-spin mx-auto text-[#0a0a0a] shrink-0" />
             <p className="text-sm">Loading classroom attendance records...</p>
           </div>
-        ) : filteredAttendance.length === 0 ? (
-          <div className="ui-card p-12 text-center space-y-3">
-            <AlertCircle className="w-6 h-6 text-[#737373] mx-auto shrink-0" />
-            <p className="text-sm text-[#737373]">No attendance records found for the selected class and date.</p>
-          </div>
         ) : (
+          <div className="space-y-4">
+            {(() => {
+              const selectedCls = classes.find((c) => String(c.id) === selectedClassId);
+              if (selectedCls?.endDate && dateFilter > selectedCls.endDate) {
+                return (
+                  <div className="flex items-center space-x-2 p-3 bg-[#fef2f2] border border-[#fecaca] rounded-[18px] text-[#e7000b] text-xs font-semibold">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>Course has concluded: {selectedCls.name} ended on {selectedCls.endDate}. Attendance is no longer expected for subsequent dates.</span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {filteredAttendance.length === 0 ? (
+              <div className="ui-card p-12 text-center space-y-3">
+                <AlertCircle className="w-6 h-6 text-[#737373] mx-auto shrink-0" />
+                <p className="text-sm text-[#737373]">No attendance records found for the selected class and date.</p>
+              </div>
+            ) : (
           <div className="ui-card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
@@ -314,6 +329,8 @@ export default function AttendanceHistoryPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+            )}
           </div>
         )}
 

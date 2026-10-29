@@ -32,7 +32,7 @@ export async function PUT(
       );
     }
 
-    const { name, description, isActive, sessionStart, sessionEnd } = parseResult.data;
+    const { name, description, isActive, sessionStart, sessionEnd, startDate, endDate } = parseResult.data;
 
     const [updatedClass] = await db
       .update(classes)
@@ -42,6 +42,8 @@ export async function PUT(
         isActive,
         sessionStart: sessionStart || null,
         sessionEnd: sessionEnd || null,
+        startDate: startDate || null,
+        endDate: endDate || null,
         updatedAt: new Date(),
       })
       .where(eq(classes.id, classId))
