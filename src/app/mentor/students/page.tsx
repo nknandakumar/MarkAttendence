@@ -81,10 +81,14 @@ export default function StudentManagementPage() {
         setClasses(classData.classes || []);
       }
 
+      if (!selectedClassFilter) {
+        setStudents([]);
+        setLoading(false);
+        return;
+      }
+
       // Fetch student roster with full attendance statistics
-      const reportUrl = `/api/reports?type=students${
-        selectedClassFilter ? `&classId=${selectedClassFilter}` : ''
-      }`;
+      const reportUrl = `/api/reports?type=students&classId=${selectedClassFilter}`;
       const reportRes = forceFresh
         ? await fetch(reportUrl).then((r) => r.json())
         : await fetchWithCache(reportUrl, 15 * 1000);
@@ -305,7 +309,7 @@ export default function StudentManagementPage() {
           </div>
         )}
 
-        {/* Filters Toolbar (Matches Screenshot: Search on left, FILTER CLASS on right) */}
+        {/* Filters Toolbar (Search on left, FILTER CLASS on right) */}
         <div className="bg-[#ffffff] border border-[#e5e5e5] rounded-[18px] px-5 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center space-x-2.5 w-full sm:w-auto flex-1">
             <Search className="w-4 h-4 text-[#737373] shrink-0" />
@@ -313,9 +317,20 @@ export default function StudentManagementPage() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              disabled={!selectedClassFilter}
               placeholder="Filter student by name or phone..."
-              className="w-full bg-transparent border-none text-[#0a0a0a] placeholder-[#737373] text-sm focus:outline-none font-medium"
+              className="w-full bg-transparent border-none text-[#0a0a0a] placeholder-[#737373] text-sm focus:outline-none font-medium disabled:opacity-40"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="p-1 rounded-full text-[#737373] hover:text-[#0a0a0a] hover:bg-[#e5e5e5] transition cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-4 h-4 shrink-0" />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center space-x-2.5 w-full sm:w-auto shrink-0">
@@ -327,7 +342,7 @@ export default function StudentManagementPage() {
               onChange={(e) => setSelectedClassFilter(e.target.value)}
               className="px-3.5 py-1.5 ui-input text-xs font-bold text-[#0a0a0a] cursor-pointer min-w-[180px]"
             >
-              <option value="">All Classes</option>
+              <option value="">-- Select Class --</option>
               {classes.map((c) => (
                 <option key={c.id} value={String(c.id)}>
                   {c.name}
@@ -339,7 +354,17 @@ export default function StudentManagementPage() {
 
         {/* Excel-Style Spreadsheet Table */}
         <div className="bg-[#ffffff] border border-[#e5e5e5] rounded-[18px] overflow-hidden shadow-xs">
-          {loading ? (
+          {!selectedClassFilter ? (
+            <div className="py-16 text-center text-[#737373] space-y-3">
+              <div className="w-12 h-12 rounded-full bg-[#f0f9ff] border border-[#bae6fd] flex items-center justify-center mx-auto text-[#0284c7]">
+                <Users className="w-6 h-6 shrink-0" />
+              </div>
+              <p className="text-base font-semibold text-[#0a0a0a]">Select a Classroom</p>
+              <p className="text-xs text-[#737373] max-w-sm mx-auto">
+                Please select a classroom from the "FILTER CLASS" dropdown above to view and manage student records.
+              </p>
+            </div>
+          ) : loading ? (
             <div className="py-20 text-center text-[#737373] space-y-2">
               <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#0a0a0a]" />
               <p className="text-sm font-medium">Loading student directory...</p>
@@ -349,38 +374,37 @@ export default function StudentManagementPage() {
               <Users className="w-8 h-8 mx-auto text-[#737373]" />
               <p className="text-base font-semibold text-[#0a0a0a]">No students found.</p>
               <p className="text-xs text-[#737373] max-w-sm mx-auto">
-                {selectedClassFilter
-                  ? `No students are enrolled in ${selectedClassName || 'this class'}. Click "Register Student" or "Import Excel" to add students.`
-                  : 'No student records available. Register a student or import from Excel to get started.'}
+                No students are enrolled in ${selectedClassName || 'this class'}. Click "Register Student" or "Import Excel" to add students.
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
-                <colgroup>
-                  <col style={{ width: '50px' }} />
-                  <col style={{ width: '22%' }} />
-                  <col style={{ width: '130px' }} />
-                  <col style={{ width: '26%' }} />
-                  <col style={{ width: '110px' }} />
-                  <col style={{ width: '85px' }} />
-                  <col style={{ width: '85px' }} />
-                  <col style={{ width: '85px' }} />
-                  <col style={{ width: '90px' }} />
-                </colgroup>
-                <thead className="bg-[#f0f0f0] border-b-2 border-[#d4d4d4] text-[11px] font-bold uppercase tracking-wider text-[#525252] sticky top-0 z-10">
-                  <tr>
-                    <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">#</th>
-                    <th className="py-3 px-4 border-r border-[#d4d4d4]">STUDENT NAME</th>
-                    <th className="py-3 px-3 border-r border-[#d4d4d4]">PHONE</th>
-                    <th className="py-3 px-4 border-r border-[#d4d4d4]">ENROLLED CLASSES</th>
-                    <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">TOTAL SESSIONS</th>
-                    <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">PRESENT</th>
-                    <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">ABSENT</th>
-                    <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">RATE</th>
-                    <th className="py-3 px-3 text-center">ACTIONS</th>
-                  </tr>
-                </thead>
+              <div className="min-w-[950px]">
+                <table className="w-full text-left text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '50px' }} />
+                    <col style={{ width: '200px' }} />
+                    <col style={{ width: '130px' }} />
+                    <col style={{ width: '200px' }} />
+                    <col style={{ width: '110px' }} />
+                    <col style={{ width: '85px' }} />
+                    <col style={{ width: '85px' }} />
+                    <col style={{ width: '85px' }} />
+                    <col style={{ width: '90px' }} />
+                  </colgroup>
+                  <thead className="bg-[#f0f0f0] border-b-2 border-[#d4d4d4] text-[11px] font-bold uppercase tracking-wider text-[#525252] sticky top-0 z-10">
+                    <tr>
+                      <th className="py-3 px-3 text-center border-r border-[#d4d4d4] whitespace-nowrap">#</th>
+                      <th className="py-3 px-4 border-r border-[#d4d4d4] whitespace-nowrap">STUDENT NAME</th>
+                      <th className="py-3 px-3 border-r border-[#d4d4d4] whitespace-nowrap">PHONE</th>
+                      <th className="py-3 px-4 border-r border-[#d4d4d4] whitespace-nowrap">ENROLLED CLASSES</th>
+                      <th className="py-3 px-3 text-center border-r border-[#d4d4d4] whitespace-nowrap">TOTAL SESSIONS</th>
+                      <th className="py-3 px-3 text-center border-r border-[#d4d4d4] whitespace-nowrap">PRESENT</th>
+                      <th className="py-3 px-3 text-center border-r border-[#d4d4d4] whitespace-nowrap">ABSENT</th>
+                      <th className="py-3 px-3 text-center border-r border-[#d4d4d4] whitespace-nowrap">RATE</th>
+                      <th className="py-3 px-3 text-center whitespace-nowrap">ACTIONS</th>
+                    </tr>
+                  </thead>
                 <tbody className="text-sm">
                   {filteredStudents.map((s, idx) => {
                     const rate = Number(s.attendanceRate ?? 0);
@@ -394,13 +418,13 @@ export default function StudentManagementPage() {
                         <td className="py-3.5 px-3 text-center font-mono text-xs text-[#737373] border-r border-[#e5e5e5]">
                           {idx + 1}
                         </td>
-                        <td className="py-3.5 px-4 font-bold text-[#0a0a0a] text-xs sm:text-sm truncate border-r border-[#e5e5e5]">
+                        <td className="py-3.5 px-4 font-bold text-[#0a0a0a] text-xs sm:text-sm truncate border-r border-[#e5e5e5] whitespace-nowrap">
                           {s.name}
                         </td>
-                        <td className="py-3.5 px-3 font-mono text-xs text-[#737373] border-r border-[#e5e5e5]">
+                        <td className="py-3.5 px-3 font-mono text-xs text-[#737373] border-r border-[#e5e5e5] whitespace-nowrap">
                           {s.phone}
                         </td>
-                        <td className="py-3.5 px-4 text-xs text-[#525252] truncate border-r border-[#e5e5e5]" title={s.enrolledClassNames}>
+                        <td className="py-3.5 px-4 text-xs text-[#525252] truncate border-r border-[#e5e5e5] whitespace-nowrap" title={s.enrolledClassNames}>
                           {s.enrolledClassNames || '–'}
                         </td>
                         <td className="py-3.5 px-3 text-center text-xs font-bold text-[#0a0a0a] border-r border-[#e5e5e5]">
@@ -446,6 +470,7 @@ export default function StudentManagementPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 

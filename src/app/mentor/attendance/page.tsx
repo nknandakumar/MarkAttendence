@@ -11,6 +11,7 @@ import {
   AlertCircle,
   UserCheck,
   BookOpen,
+  X,
 } from 'lucide-react';
 
 export default function AttendanceHistoryPage() {
@@ -199,7 +200,7 @@ export default function AttendanceHistoryPage() {
           </div>
 
           {/* Search */}
-          <div className="flex items-center space-x-2.5 px-3 py-1.5 bg-[#f5f5f5] rounded-[18px] border border-transparent">
+          <div className="flex items-center space-x-2 px-3 py-1.5 bg-[#f5f5f5] rounded-[18px] border border-transparent">
             <Search className="w-4 h-4 text-[#737373] shrink-0" />
             <input
               type="text"
@@ -209,6 +210,16 @@ export default function AttendanceHistoryPage() {
               placeholder="Search student or phone..."
               className="w-full bg-transparent border-none text-[#0a0a0a] placeholder-[#737373] text-xs font-medium focus:outline-none disabled:opacity-40"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="p-0.5 rounded-full text-[#737373] hover:text-[#0a0a0a] transition cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5 shrink-0" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -260,7 +271,6 @@ export default function AttendanceHistoryPage() {
                     <th className="py-3 px-5">Phone Number</th>
                     <th className="py-3 px-5">Classroom</th>
                     <th className="py-3 px-5">Marked Time</th>
-                    <th className="py-3 px-5">Verification IP</th>
                     <th className="py-3 px-5 text-right">Status</th>
                   </tr>
                 </thead>
@@ -299,12 +309,7 @@ export default function AttendanceHistoryPage() {
                             <span>{markedTime}</span>
                           </div>
                         </td>
-                        <td className="py-3.5 px-5 text-xs font-mono text-[#737373]">
-                          <div className="flex items-center space-x-1.5">
-                            <Globe className="w-3.5 h-3.5 text-[#737373] shrink-0" />
-                            <span>{log.ipAddress || '—'}</span>
-                          </div>
-                        </td>
+
                         <td className="py-3.5 px-5 text-right">
                           <button
                             onClick={() => handleToggleStatus(log)}

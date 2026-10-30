@@ -160,12 +160,11 @@ export async function GET(req: NextRequest) {
         const exportRows = studentReports.map((r) => ({
           'Student Name': r.name,
           'Phone': r.phone,
-          'Classes Enrolled': r.enrolledClassNames,
+          'Class': r.enrolledClassNames,
           'Total Sessions': r.totalSessions,
-          'Present / Attended': r.totalAttended,
+          'Present': r.totalAttended,
           'Absent': r.absent,
-          'Attendance Percentage': `${r.attendanceRate}%`,
-          'Last Active Date': r.lastAttendedDate,
+          'Attendance Rate': `${r.attendanceRate}%`,
         }));
 
         if (format === 'csv') {

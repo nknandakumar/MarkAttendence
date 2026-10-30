@@ -301,8 +301,8 @@ export default function MentorSettingsPage() {
               <div className="flex items-start space-x-2 p-3 bg-[#fafafa] border border-[#e5e5e5] rounded-[14px] text-xs text-[#737373]">
                 <CalendarOff className="w-4 h-4 shrink-0 mt-0.5 text-[#0a0a0a]" />
                 <p>
-                  <span className="font-semibold text-[#0a0a0a]">Weekends are automatically blocked.</span>{' '}
-                  Saturday and Sunday attendance is disabled at the server level — no manual entry needed.
+                  <span className="font-semibold text-[#0a0a0a]">Weekday & Weekend class schedule:</span>{' '}
+                  Weekday classes open Monday–Friday; Weekend classes open Saturday & Sunday automatically at the server level.
                 </p>
               </div>
             </div>

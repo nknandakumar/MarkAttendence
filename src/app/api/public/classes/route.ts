@@ -13,6 +13,7 @@ export async function GET() {
         name: classes.name,
         description: classes.description,
         isActive: classes.isActive,
+        classType: classes.classType,
         sessionStart: classes.sessionStart,
         sessionEnd: classes.sessionEnd,
       })

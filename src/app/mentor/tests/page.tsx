@@ -747,6 +747,16 @@ export default function MentorTestsPage() {
               placeholder="Search tests by title or class name..."
               className="w-full bg-transparent border-none text-[#0a0a0a] placeholder-[#737373] text-sm focus:outline-none font-medium"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="p-1 rounded-full text-[#737373] hover:text-[#0a0a0a] hover:bg-[#e5e5e5] transition cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-4 h-4 shrink-0" />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center space-x-2 w-full sm:w-auto shrink-0">
@@ -976,7 +986,7 @@ export default function MentorTestsPage() {
 
             {/* Filter & Sort Controls Toolbar */}
             <div className="px-5 sm:px-8 py-3 bg-[#fafafa] border-b border-[#e5e5e5] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-              <div className="flex items-center space-x-2 flex-1 max-w-xs">
+              <div className="flex items-center space-x-2 flex-1 max-w-xs bg-white px-2.5 py-1 rounded-[14px] border border-[#e5e5e5]">
                 <Search className="w-3.5 h-3.5 text-[#737373] shrink-0" />
                 <input
                   type="text"
@@ -985,6 +995,16 @@ export default function MentorTestsPage() {
                   placeholder="Search student..."
                   className="w-full text-xs bg-transparent border-none focus:outline-none placeholder-[#737373] font-medium"
                 />
+                {viewSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setViewSearch('')}
+                    className="p-0.5 rounded-full text-[#737373] hover:text-[#0a0a0a] transition cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5 shrink-0" />
+                  </button>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -1039,12 +1059,11 @@ export default function MentorTestsPage() {
                   <table className="w-full text-left text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
                     <colgroup>
                       <col style={{ width: '50px' }} />
-                      <col style={{ width: '28%' }} />
-                      <col style={{ width: '130px' }} />
-                      <col style={{ width: '130px' }} />
+                      <col style={{ width: '32%' }} />
                       <col style={{ width: '150px' }} />
-                      <col style={{ width: '130px' }} />
-                      <col style={{ width: '100px' }} />
+                      <col style={{ width: '150px' }} />
+                      <col style={{ width: '170px' }} />
+                      <col style={{ width: '110px' }} />
                     </colgroup>
                     <thead className="bg-[#f0f0f0] border-b-2 border-[#d4d4d4] text-[11px] font-bold uppercase tracking-wider text-[#525252] sticky top-0 z-10">
                       <tr>
@@ -1059,9 +1078,7 @@ export default function MentorTestsPage() {
                         <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">
                           Mock Interview <span className="text-[10px] lowercase font-normal">(/ {viewTest.maxMarksMI ?? 50})</span>
                         </th>
-                        <th className="py-3 px-3 text-center border-r border-[#d4d4d4] bg-[#e5e5e5]/50">
-                          Total <span className="text-[10px] lowercase font-normal">(/ {viewTest.maxMarks})</span>
-                        </th>
+
                         <th className="py-3 px-3 text-center">Status</th>
                       </tr>
                     </thead>
@@ -1117,16 +1134,7 @@ export default function MentorTestsPage() {
                                 <span className="text-[#a3a3a3] italic">–</span>
                               )}
                             </td>
-                            {/* Total Marks */}
-                            <td className="py-3 px-3 text-center font-bold text-sm border-r border-[#e5e5e5] bg-[#fafafa]">
-                              {s.isAbsent ? (
-                                <span className="text-[#e7000b] text-xs font-bold">ABSENT</span>
-                              ) : hasScore ? (
-                                <span className="text-[#0a0a0a] font-extrabold">{s.marksObtained}</span>
-                              ) : (
-                                <span className="text-[#a3a3a3] text-xs italic">Unmarked</span>
-                              )}
-                            </td>
+
                             {/* Status */}
                             <td className="py-3 px-3 text-center">
                               {s.isAbsent ? (
@@ -1398,7 +1406,7 @@ export default function MentorTestsPage() {
 
             {/* Search Filter for Student Table */}
             <div className="px-5 sm:px-8 py-2.5 border-b border-[#e5e5e5] flex items-center justify-between gap-3 shrink-0 bg-[#fafafa]">
-              <div className="flex items-center space-x-2 flex-1 max-w-sm">
+              <div className="flex items-center space-x-2 flex-1 max-w-sm bg-white px-2.5 py-1 rounded-[14px] border border-[#e5e5e5]">
                 <Search className="w-3.5 h-3.5 text-[#737373] shrink-0" />
                 <input
                   type="text"
@@ -1407,6 +1415,16 @@ export default function MentorTestsPage() {
                   placeholder="Filter student in this test..."
                   className="w-full text-xs bg-transparent border-none focus:outline-none placeholder-[#737373]"
                 />
+                {marksSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setMarksSearch('')}
+                    className="p-0.5 rounded-full text-[#737373] hover:text-[#0a0a0a] transition cursor-pointer"
+                    title="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5 shrink-0" />
+                  </button>
+                )}
               </div>
               <div className="text-xs text-[#737373]">
                 {filteredStudentMarks.length} students enrolled
@@ -1434,11 +1452,10 @@ export default function MentorTestsPage() {
                   <table className="w-full text-left text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
                     <colgroup>
                       <col style={{ width: '50px' }} />
-                      <col style={{ width: '26%' }} />
+                      <col style={{ width: '34%' }} />
                       <col style={{ width: '22%' }} />
                       <col style={{ width: '22%' }} />
                       <col style={{ width: '22%' }} />
-                      <col style={{ width: '80px' }} />
                     </colgroup>
                     <thead className="bg-[#f0f0f0] border-b-2 border-[#d4d4d4] text-[11px] font-bold uppercase tracking-wider text-[#525252] sticky top-0 z-10">
                       <tr>
@@ -1453,9 +1470,7 @@ export default function MentorTestsPage() {
                         <th className="py-3 px-3 text-center border-r border-[#d4d4d4]">
                           Mock Interview <span className="lowercase font-normal">(/ {activeTest.maxMarksMI ?? 50})</span>
                         </th>
-                        <th className="py-3 px-3 text-center bg-[#e5e5e5]/50">
-                          Total <span className="lowercase font-normal">(/ {activeTest.maxMarks})</span>
-                        </th>
+
                       </tr>
                     </thead>
                     <tbody className="text-sm">
@@ -1560,16 +1575,7 @@ export default function MentorTestsPage() {
                               </div>
                             </td>
 
-                            {/* Total Computed Score */}
-                            <td className="py-2.5 px-3 text-center font-extrabold text-xs bg-[#fafafa]">
-                              {s.isAbsent ? (
-                                <span className="text-[#e7000b]">ABS</span>
-                              ) : s.marksObtained !== '' && s.marksObtained !== null ? (
-                                <span className="text-[#0a0a0a]">{s.marksObtained}</span>
-                              ) : (
-                                <span className="text-[#a3a3a3] font-normal">–</span>
-                              )}
-                            </td>
+
                           </tr>
                         );
                       })}

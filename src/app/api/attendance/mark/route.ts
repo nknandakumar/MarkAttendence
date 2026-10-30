@@ -86,20 +86,11 @@ export async function POST(req: NextRequest) {
 
     const { phone: normalizedPhone, classId: requestedClassId } = parseResult.data;
 
-    // 4. Weekend Check (IST) — Saturday (6) and Sunday (0) are non-class days
+    // 4. Day of Week Check (IST) — 0=Sun, 6=Sat
     const todayStr = getISTDateStr();
-    const dayOfWeek = new Date(todayStr + 'T00:00:00Z').getUTCDay(); // 0=Sun, 6=Sat
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      const dayName = dayOfWeek === 0 ? 'Sunday' : 'Saturday';
-      return NextResponse.json(
-        {
-          success: false,
-          code: 'SESSION_HOLIDAY',
-          message: `No class today — it's ${dayName}! Enjoy your weekend. 🎉`,
-        },
-        { status: 403 }
-      );
-    }
+    const dayOfWeek = new Date(todayStr + 'T00:00:00Z').getUTCDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const dayName = dayOfWeek === 0 ? 'Sunday' : dayOfWeek === 6 ? 'Saturday' : 'Weekday';
 
     // 5. Public Holiday / No-Class Check
     const holidayRecord = await db
@@ -152,12 +143,14 @@ export async function POST(req: NextRequest) {
       if (found.length > 0) classRecord = found[0];
     }
 
-    // If classId wasn't passed or not found, find the currently active class for current time
+    // If classId wasn't passed or not found, find the currently active class for current time and schedule
     if (!classRecord) {
       const allClasses = await db.select().from(classes);
       const activeClass = allClasses.find((c) => {
         if (!c.isActive) return false;
         if (!c.sessionStart || !c.sessionEnd) return false;
+        const matchesDay = isWeekend ? c.classType === 'weekend' : (c.classType || 'weekday') === 'weekday';
+        if (!matchesDay) return false;
         return currentTimeStr >= c.sessionStart && currentTimeStr <= c.sessionEnd;
       });
 
@@ -166,13 +159,38 @@ export async function POST(req: NextRequest) {
           {
             success: false,
             code: 'SESSION_CLOSED',
-            message: 'No active class session right now. Attendance is currently closed.',
+            message: isWeekend
+              ? `No active weekend class session right now on ${dayName}. Attendance is currently closed.`
+              : 'No active class session right now. Attendance is currently closed.',
           },
           { status: 403 }
         );
       }
 
       classRecord = activeClass;
+    }
+
+    // Verify day of week matches the class schedule type
+    const isWeekendClass = classRecord.classType === 'weekend';
+    if (isWeekend && !isWeekendClass) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'SESSION_CLOSED',
+          message: `${classRecord.name} is a weekday class (Monday to Friday). It is closed on ${dayName}.`,
+        },
+        { status: 403 }
+      );
+    }
+    if (!isWeekend && isWeekendClass) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: 'SESSION_CLOSED',
+          message: `${classRecord.name} is a weekend class (Saturday and Sunday). It is closed on weekdays.`,
+        },
+        { status: 403 }
+      );
     }
 
     const currentClassId = classRecord.id;

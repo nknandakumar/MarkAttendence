@@ -32,7 +32,14 @@ export async function PUT(
       );
     }
 
-    const { name, description, isActive, sessionStart, sessionEnd, startDate, endDate } = parseResult.data;
+    const { name, description, isActive, classType, sessionStart, sessionEnd, startDate, endDate } = parseResult.data;
+
+    if (sessionStart >= sessionEnd) {
+      return NextResponse.json(
+        { success: false, message: 'Session end time must be after start time.' },
+        { status: 400 }
+      );
+    }
 
     const [updatedClass] = await db
       .update(classes)
@@ -40,6 +47,7 @@ export async function PUT(
         name: name.trim(),
         description: description?.trim() || null,
         isActive,
+        classType: classType || 'weekday',
         sessionStart: sessionStart || null,
         sessionEnd: sessionEnd || null,
         startDate: startDate || null,

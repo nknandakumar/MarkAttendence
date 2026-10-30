@@ -9,6 +9,7 @@ interface ClassItem {
   id: number;
   name: string;
   description?: string | null;
+  classType?: 'weekday' | 'weekend' | string | null;
   sessionStart?: string | null;
   sessionEnd?: string | null;
 }
@@ -83,18 +84,25 @@ export default function StudentAttendancePage() {
       const data = await fetchWithCache('/api/public/classes', 30 * 1000);
       if (data && data.success && Array.isArray(data.classes)) {
         setClassesList(data.classes);
+        checkHoliday(data.classes);
       }
     } catch (err) {
       console.error('Failed to fetch classes:', err);
     }
   };
 
-  /** Check if today is a holiday (weekend or admin-defined) */
-  const checkHoliday = async () => {
+  /** Check if today is a holiday (admin-defined or weekend with no weekend classes) */
+  const checkHoliday = async (classes?: ClassItem[]) => {
+    const currentClasses = classes || classesList;
     const weekend = isTodayWeekend();
+
+    // If today is a weekend, check if there are any weekend classes
     if (weekend.is) {
-      setHolidayInfo({ isHoliday: true, reason: `It's ${weekend.day} — No class today! 🎉` });
-      return;
+      const hasWeekendClasses = currentClasses.some((c) => c.classType === 'weekend');
+      if (!hasWeekendClasses) {
+        setHolidayInfo({ isHoliday: true, reason: `It's ${weekend.day} — No weekend classes scheduled today! 🎉` });
+        return;
+      }
     }
 
     try {
@@ -134,17 +142,25 @@ export default function StudentAttendancePage() {
   useEffect(() => {
     checkNetwork();
     fetchClasses();
-    checkHoliday();
   }, []);
 
+  const weekend = isTodayWeekend();
+  const isWeekend = weekend.is;
+
+  // Filter classes running today based on weekday (Mon-Fri) vs weekend (Sat-Sun)
+  const todayClasses = classesList.filter((cls) => {
+    const isWeekendClass = cls.classType === 'weekend';
+    return isWeekend ? isWeekendClass : !isWeekendClass;
+  });
+
   // Find the currently active class based on assigned timings
-  const activeClass = classesList.find((cls) => {
+  const activeClass = todayClasses.find((cls) => {
     if (!cls.sessionStart || !cls.sessionEnd) return false;
     return currentTime >= cls.sessionStart && currentTime <= cls.sessionEnd;
   });
 
   // Scheduled classes for display when no session is active
-  const scheduledClasses = classesList.filter((c) => c.sessionStart && c.sessionEnd);
+  const scheduledClasses = todayClasses.filter((c) => c.sessionStart && c.sessionEnd);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

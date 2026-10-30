@@ -40,6 +40,8 @@ export const classes = pgTable('classes', {
   name: varchar('name', { length: 255 }).notNull().unique(),
   description: text('description'),
   isActive: boolean('is_active').default(true).notNull(),
+  // Class schedule type: 'weekday' (Mon-Fri) or 'weekend' (Sat-Sun)
+  classType: varchar('class_type', { length: 20 }).default('weekday').notNull(),
   // Session window: "HH:MM" in 24h format (e.g. "10:00", "11:10"). Null = no restriction.
   sessionStart: varchar('session_start', { length: 5 }),
   sessionEnd: varchar('session_end', { length: 5 }),

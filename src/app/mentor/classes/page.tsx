@@ -21,6 +21,7 @@ import { fetchWithCache, invalidateCache } from '@/lib/cache/client-cache';
 
 /** Convert 24h "HH:MM" to "H:MM AM/PM" */
 function formatTime12h(t: string) {
+  if (!t) return '';
   const [h, m] = t.split(':').map(Number);
   const ampm = h >= 12 ? 'PM' : 'AM';
   const hour12 = h % 12 || 12;
@@ -38,6 +39,7 @@ export default function MentorClassesPage() {
   const [editingClass, setEditingClass] = useState<any>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [classType, setClassType] = useState<'weekday' | 'weekend'>('weekday');
   const [sessionStart, setSessionStart] = useState('');
   const [sessionEnd, setSessionEnd] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -82,6 +84,7 @@ export default function MentorClassesPage() {
     setEditingClass(null);
     setName('');
     setDescription('');
+    setClassType('weekday');
     setSessionStart('');
     setSessionEnd('');
     setStartDate(new Date().toISOString().split('T')[0]);
@@ -94,6 +97,7 @@ export default function MentorClassesPage() {
     setEditingClass(cls);
     setName(cls.name);
     setDescription(cls.description || '');
+    setClassType(cls.classType === 'weekend' ? 'weekend' : 'weekday');
     setSessionStart(cls.sessionStart || '');
     setSessionEnd(cls.sessionEnd || '');
     setStartDate(cls.startDate || '');
@@ -106,12 +110,12 @@ export default function MentorClassesPage() {
     e.preventDefault();
     if (!name.trim() || saving) return;
 
-    // Validate: if one time is set, both must be set
-    if ((sessionStart && !sessionEnd) || (!sessionStart && sessionEnd)) {
-      setError('Please set both start and end time, or leave both empty.');
+    // Validate mandatory attendance window
+    if (!sessionStart || !sessionEnd) {
+      setError('Attendance window is mandatory. Please specify both Start Time and End Time.');
       return;
     }
-    if (sessionStart && sessionEnd && sessionStart >= sessionEnd) {
+    if (sessionStart >= sessionEnd) {
       setError('Session end time must be after start time.');
       return;
     }
@@ -135,8 +139,9 @@ export default function MentorClassesPage() {
         body: JSON.stringify({
           name: name.trim(),
           description: description.trim(),
-          sessionStart: sessionStart || null,
-          sessionEnd: sessionEnd || null,
+          classType,
+          sessionStart,
+          sessionEnd,
           startDate: startDate || null,
           endDate: endDate || null,
         }),
@@ -160,13 +165,14 @@ export default function MentorClassesPage() {
   };
 
   const handleDelete = async (id: number, className: string) => {
-    if (!confirm(`Are you sure you want to delete class "${className}"? All attendance records for this class will also be removed.`)) {
+    if (!confirm(`Are you sure you want to delete "${className}"? This will remove all student enrollments and tests for this class.`)) {
       return;
     }
 
     try {
       const res = await fetch(`/api/classes/${id}`, { method: 'DELETE' });
       const data = await res.json();
+
       if (res.ok && data.success) {
         setSuccessMsg(`Class "${className}" deleted.`);
         setTimeout(() => setSuccessMsg(''), 4000);
@@ -194,10 +200,10 @@ export default function MentorClassesPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-[-0.75px] text-[#0a0a0a]">
-              Classrooms Management
+              Classroom Management
             </h1>
             <p className="text-sm text-[#737373]">
-              Create, edit, and organize classroom subjects. Set session time windows to restrict when attendance can be marked.
+              Configure classrooms, weekday & weekend schedules, and mandatory session attendance windows.
             </p>
           </div>
 
@@ -206,28 +212,40 @@ export default function MentorClassesPage() {
             className="btn-primary shrink-0"
           >
             <Plus className="w-4 h-4 shrink-0" />
-            <span>Create New Class</span>
+            <span>Create Classroom</span>
           </button>
         </div>
 
         {/* Success Alert */}
         {successMsg && (
-          <div className="flex items-center space-x-2 p-3 bg-[#fafafa] border border-[#e5e5e5] rounded-[18px] text-[#0a0a0a] text-xs font-semibold">
+          <div className="flex items-center space-x-2 p-3 bg-[#fafafa] border border-[#e5e5e5] rounded-[18px] text-[#0a0a0a] text-xs font-semibold shadow-xs">
             <CheckCircle2 className="w-4 h-4 text-[#0a0a0a] shrink-0" />
             <span>{successMsg}</span>
           </div>
         )}
 
-        {/* Search Bar */}
-        <div className="ui-card p-3 flex items-center space-x-3">
-          <Search className="w-4 h-4 text-[#737373] shrink-0 ml-1" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search classes by name or description..."
-            className="w-full bg-transparent border-none text-[#0a0a0a] placeholder-[#737373] text-sm focus:outline-none font-medium"
-          />
+        {/* Search Bar with Cancel Button */}
+        <div className="ui-card p-3 flex items-center justify-between space-x-3">
+          <div className="flex items-center space-x-2.5 flex-1">
+            <Search className="w-4 h-4 text-[#737373] shrink-0 ml-1" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search classes by name or description..."
+              className="w-full bg-transparent border-none text-[#0a0a0a] placeholder-[#737373] text-sm focus:outline-none font-medium"
+            />
+          </div>
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="p-1 rounded-full text-[#737373] hover:text-[#0a0a0a] hover:bg-[#e5e5e5] transition cursor-pointer"
+              title="Clear search"
+            >
+              <X className="w-4 h-4 shrink-0" />
+            </button>
+          )}
         </div>
 
         {/* Classes Grid */}
@@ -238,21 +256,30 @@ export default function MentorClassesPage() {
           </div>
         ) : filteredClasses.length === 0 ? (
           <div className="ui-card p-12 text-center space-y-3">
-            <AlertCircle className="w-6 h-6 text-[#737373] mx-auto shrink-0" />
-            <p className="text-sm text-[#737373]">No classes found.</p>
+            <BookOpen className="w-8 h-8 text-[#737373] mx-auto shrink-0" />
+            <h3 className="text-base font-bold text-[#0a0a0a]">No classrooms found</h3>
+            <p className="text-xs text-[#737373] max-w-sm mx-auto">
+              {search
+                ? 'No classes match your search query.'
+                : 'Click "Create Classroom" to add your first batch or subject.'}
+            </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredClasses.map((cls) => (
-              <div key={cls.id} className="ui-card p-5 space-y-4 flex flex-col justify-between">
+              <div
+                key={cls.id}
+                className="ui-card p-5 flex flex-col justify-between space-y-4 hover:border-[#737373] transition-all"
+              >
                 <div className="space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-8 h-8 rounded-[18px] bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] flex items-center justify-center">
-                        <BookOpen className="w-4 h-4 text-[#0a0a0a] shrink-0" />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-[18px] bg-[#f5f5f5] text-[#0a0a0a] border border-[#e5e5e5] flex items-center justify-center">
+                        <BookOpen className="w-3.5 h-3.5 shrink-0" />
                       </div>
-                      <h3 className="text-base font-bold text-[#0a0a0a]">{cls.name}</h3>
+                      <h3 className="text-base font-bold text-[#0a0a0a] line-clamp-1">{cls.name}</h3>
                     </div>
+
                     <div className="flex items-center space-x-1">
                       <button
                         onClick={() => openEditModal(cls)}
@@ -275,20 +302,32 @@ export default function MentorClassesPage() {
                     {cls.description || 'No description provided.'}
                   </p>
 
-                  {/* Session timing badge */}
-                  {cls.sessionStart && cls.sessionEnd ? (
-                    <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#f0f9ff] border border-[#bae6fd] rounded-[10px] w-fit">
-                      <Clock className="w-3 h-3 text-[#0284c7] shrink-0" />
-                      <span className="text-[10px] font-semibold text-[#0284c7]">
-                        {formatTime12h(cls.sessionStart)} – {formatTime12h(cls.sessionEnd)}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#fafafa] border border-[#e5e5e5] rounded-[10px] w-fit">
-                      <Clock className="w-3 h-3 text-[#a3a3a3] shrink-0" />
-                      <span className="text-[10px] font-medium text-[#a3a3a3]">No time restriction</span>
-                    </div>
-                  )}
+                  {/* Schedule type & Attendance window badges */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`px-2.5 py-1 rounded-[10px] text-[10px] font-bold border ${
+                        cls.classType === 'weekend'
+                          ? 'bg-[#fefce8] text-[#854d0e] border-[#fde047]'
+                          : 'bg-[#f0fdf4] text-[#166534] border-[#bbf7d0]'
+                      }`}
+                    >
+                      {cls.classType === 'weekend' ? '🗓️ Weekend (Sat-Sun)' : '📅 Weekday (Mon-Fri)'}
+                    </span>
+
+                    {cls.sessionStart && cls.sessionEnd ? (
+                      <div className="flex items-center space-x-1.5 px-2.5 py-1 bg-[#f0f9ff] border border-[#bae6fd] rounded-[10px]">
+                        <Clock className="w-3 h-3 text-[#0284c7] shrink-0" />
+                        <span className="text-[10px] font-semibold text-[#0284c7]">
+                          {formatTime12h(cls.sessionStart)} – {formatTime12h(cls.sessionEnd)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-1.5 px-2.5 py-1 bg-[#fef2f2] border border-[#fecaca] rounded-[10px]">
+                        <Clock className="w-3 h-3 text-[#dc2626] shrink-0" />
+                        <span className="text-[10px] font-semibold text-[#dc2626]">Timing not set</span>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Course Timeline (Start & End Date) */}
                   <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
@@ -349,6 +388,7 @@ export default function MentorClassesPage() {
                 </div>
               )}
 
+              {/* Class Name */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-[#737373] uppercase tracking-wider">
                   Class Name <span className="text-[#e7000b]">*</span>
@@ -363,6 +403,7 @@ export default function MentorClassesPage() {
                 />
               </div>
 
+              {/* Description */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-[#737373] uppercase tracking-wider">
                   Description
@@ -376,10 +417,69 @@ export default function MentorClassesPage() {
                 />
               </div>
 
-              {/* Course Timeline (Start & End Date) — non-strict */}
-              <div className="space-y-2 p-3 bg-[#fafafa] border border-[#e5e5e5] rounded-[14px]">
+              {/* Class Schedule Type: Weekday vs Weekend (Mandatory Choice) */}
+              <div className="space-y-2 p-3.5 bg-[#fafafa] border border-[#e5e5e5] rounded-[14px]">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-[#0a0a0a] uppercase tracking-wider">
+                    Class Schedule Type <span className="text-[#e7000b]">*</span>
+                  </label>
+                  <span className="text-[10px] font-bold text-[#737373] uppercase">
+                    {classType === 'weekend' ? 'Sat & Sun Only' : 'Mon – Fri Only'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#737373]">
+                  Select whether this batch runs on regular weekdays or on weekends:
+                </p>
+
+                <div className="grid grid-cols-2 gap-2.5 pt-1">
+                  <label
+                    className={`flex items-start space-x-2.5 p-3 rounded-[12px] border cursor-pointer transition select-none ${
+                      classType === 'weekday'
+                        ? 'border-[#0a0a0a] bg-white ring-2 ring-[#0a0a0a]'
+                        : 'border-[#e5e5e5] bg-white hover:border-[#a3a3a3]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="classType"
+                      value="weekday"
+                      checked={classType === 'weekday'}
+                      onChange={() => setClassType('weekday')}
+                      className="mt-0.5 text-[#0a0a0a] focus:ring-[#0a0a0a] cursor-pointer"
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-[#0a0a0a]">📅 Weekday Class</span>
+                      <span className="block text-[10px] text-[#737373] mt-0.5">Monday to Friday</span>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start space-x-2.5 p-3 rounded-[12px] border cursor-pointer transition select-none ${
+                      classType === 'weekend'
+                        ? 'border-[#0a0a0a] bg-white ring-2 ring-[#0a0a0a]'
+                        : 'border-[#e5e5e5] bg-white hover:border-[#a3a3a3]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="classType"
+                      value="weekend"
+                      checked={classType === 'weekend'}
+                      onChange={() => setClassType('weekend')}
+                      className="mt-0.5 text-[#0a0a0a] focus:ring-[#0a0a0a] cursor-pointer"
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-[#0a0a0a]">🗓️ Weekend Class</span>
+                      <span className="block text-[10px] text-[#737373] mt-0.5">Saturday & Sunday</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Course Timeline (No 'Optional' word) */}
+              <div className="space-y-2 p-3.5 bg-[#fafafa] border border-[#e5e5e5] rounded-[14px]">
                 <label className="block text-xs font-semibold text-[#0a0a0a] uppercase tracking-wider">
-                  Course Timeline <span className="normal-case font-normal text-[#737373]">(Optional)</span>
+                  Course Timeline
                 </label>
                 <p className="text-[11px] text-[#737373] leading-relaxed">
                   Mentors can specify the course start date now, and can add or edit the end date anytime when the course completes.
@@ -412,17 +512,24 @@ export default function MentorClassesPage() {
                 </div>
               </div>
 
-              {/* Session time window */}
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-[#737373] uppercase tracking-wider">
-                  Attendance Window <span className="normal-case font-normal">(optional)</span>
-                </label>
+              {/* Attendance Window (MANDATORY) */}
+              <div className="space-y-2 p-3.5 bg-[#fafafa] border border-[#e5e5e5] rounded-[14px]">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-[#0a0a0a] uppercase tracking-wider">
+                    Attendance Window <span className="text-[#e7000b]">*</span>
+                  </label>
+                  <span className="text-[10px] font-bold text-[#e7000b] uppercase tracking-wider">
+                    Mandatory
+                  </span>
+                </div>
                 <p className="text-xs text-[#737373]">
-                  Students can only mark attendance within this time window. Leave both empty for no restriction.
+                  Students can only mark attendance within this required time window.
                 </p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 pt-1">
                   <div className="space-y-1">
-                    <label className="block text-[10px] font-medium text-[#737373] uppercase">Start Time</label>
+                    <label className="block text-[10px] font-semibold text-[#737373] uppercase">
+                      Start Time <span className="text-[#e7000b]">*</span>
+                    </label>
                     <input
                       type="time"
                       value={sessionStart}
@@ -430,11 +537,14 @@ export default function MentorClassesPage() {
                         setSessionStart(e.target.value);
                         setError('');
                       }}
+                      required
                       className="w-full px-3 py-2.5 ui-input text-sm font-medium"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-[10px] font-medium text-[#737373] uppercase">End Time</label>
+                    <label className="block text-[10px] font-semibold text-[#737373] uppercase">
+                      End Time <span className="text-[#e7000b]">*</span>
+                    </label>
                     <input
                       type="time"
                       value={sessionEnd}
@@ -442,15 +552,16 @@ export default function MentorClassesPage() {
                         setSessionEnd(e.target.value);
                         setError('');
                       }}
+                      required
                       className="w-full px-3 py-2.5 ui-input text-sm font-medium"
                     />
                   </div>
                 </div>
                 {sessionStart && sessionEnd && (
-                  <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#f0f9ff] border border-[#bae6fd] rounded-[10px]">
+                  <div className="flex items-center space-x-1.5 px-2.5 py-1.5 bg-[#f0f9ff] border border-[#bae6fd] rounded-[10px] mt-2">
                     <Clock className="w-3 h-3 text-[#0284c7] shrink-0" />
                     <span className="text-[10px] font-semibold text-[#0284c7]">
-                      Preview: {formatTime12h(sessionStart)} – {formatTime12h(sessionEnd)}
+                      Attendance Window: {formatTime12h(sessionStart)} – {formatTime12h(sessionEnd)}
                     </span>
                   </div>
                 )}
@@ -466,7 +577,7 @@ export default function MentorClassesPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || !name.trim()}
+                  disabled={saving || !name.trim() || !sessionStart || !sessionEnd}
                   className="btn-primary !py-2 !px-4 !text-xs disabled:opacity-40"
                 >
                   {saving ? (

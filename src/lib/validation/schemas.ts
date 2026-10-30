@@ -41,16 +41,9 @@ export const classSchema = z.object({
   name: z.string().min(1, 'Class name is required.').max(100),
   description: z.string().optional(),
   isActive: z.boolean().default(true),
-  sessionStart: z
-    .string()
-    .regex(timeRegex, 'Session start must be in HH:MM format.')
-    .optional()
-    .nullable(),
-  sessionEnd: z
-    .string()
-    .regex(timeRegex, 'Session end must be in HH:MM format.')
-    .optional()
-    .nullable(),
+  classType: z.enum(['weekday', 'weekend']).default('weekday').optional(),
+  sessionStart: z.string().min(1, 'Session start time is required.').regex(timeRegex, 'Session start must be in HH:MM format.'),
+  sessionEnd: z.string().min(1, 'Session end time is required.').regex(timeRegex, 'Session end must be in HH:MM format.'),
   startDate: z
     .string()
     .regex(dateRegex, 'Start date must be in YYYY-MM-DD format.')

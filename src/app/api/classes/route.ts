@@ -71,6 +71,7 @@ export async function GET() {
         ...cls,
         studentCount: studentCountMap.get(cls.id) ?? 0,
         todayPresent: attendanceCountMap.get(cls.id) ?? 0,
+        classType: cls.classType || 'weekday',
         sessionStart: cls.sessionStart ?? null,
         sessionEnd: cls.sessionEnd ?? null,
         startDate: cls.startDate ?? null,
@@ -108,7 +109,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { name, description, isActive, sessionStart, sessionEnd, startDate, endDate } = parseResult.data;
+    const { name, description, isActive, classType, sessionStart, sessionEnd, startDate, endDate } = parseResult.data;
+
+    if (sessionStart >= sessionEnd) {
+      return NextResponse.json(
+        { success: false, message: 'Session end time must be after start time.' },
+        { status: 400 }
+      );
+    }
 
     // Check duplicate name
     const existing = await db
@@ -130,6 +138,7 @@ export async function POST(req: NextRequest) {
         name: name.trim(),
         description: description?.trim() || null,
         isActive: isActive ?? true,
+        classType: classType || 'weekday',
         sessionStart: sessionStart || null,
         sessionEnd: sessionEnd || null,
         startDate: startDate || null,
